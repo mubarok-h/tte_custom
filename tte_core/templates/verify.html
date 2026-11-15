@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Verifikasi Dokumen — {{ institution if institution is defined else 'TTE' }}</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; background: #f6f7f9; color: #17202a; }
+    main { max-width: 860px; margin: 0 auto; padding: 40px 20px; }
+    .card { background: #fff; border: 1px solid #e3e7ec; border-radius: 14px; padding: 26px; }
+    h1 { margin: 0 0 6px; font-size: 1.45rem; }
+    h2 { margin-top: 28px; font-size: 1.1rem; }
+    .badge { display: inline-block; padding: 7px 14px; border-radius: 999px; font-weight: 700; letter-spacing: .04em; font-size: .8rem; }
+    .valid { background: #e6f4ea; color: #137333; }
+    .invalid, .error { background: #fce8e6; color: #a50e0e; }
+    .revoked { background: #fef7e0; color: #8a5a00; }
+    .unsigned, .unknown, .not_found { background: #eef1f4; color: #445; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    td { padding: 9px 0; border-bottom: 1px solid #eef1f4; vertical-align: top; }
+    td:first-child { color: #5f6b7a; width: 34%; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; word-break: break-all; }
+    .sig { border: 1px solid #e3e7ec; border-radius: 12px; padding: 16px; margin-top: 14px; }
+    .sig-ok { border-left: 5px solid #137333; }
+    .sig-bad { border-left: 5px solid #a50e0e; }
+    .pill { font-size: .72rem; padding: 3px 8px; border-radius: 999px; background: #eef1f4; margin-right: 6px; }
+    .note { margin-top: 26px; font-size: .85rem; color: #5f6b7a; line-height: 1.6; }
+    a { color: #0b57d0; }
+    .btn { display: inline-block; margin-top: 18px; padding: 11px 18px; border-radius: 10px; background: #0b57d0; color: #fff; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <span class="badge {{ status|lower }}">{{ status }}</span>
+    <h1 style="margin-top:14px">Verifikasi Dokumen</h1>
+
+    {% if error %}
+      <p>{{ error }}</p>
+    {% endif %}
+
+    {% if result and result.document %}
+      <table>
+        <tr><td>ID dokumen</td><td class="mono">{{ result.document.short_id }}</td></tr>
+        <tr><td>Nama berkas</td><td>{{ result.document.filename }}</td></tr>
+        <tr><td>SHA-256 sumber</td><td class="mono">{{ result.document.sha256 }}</td></tr>
+        {% if result.document.final_sha256 %}
+          <tr><td>SHA-256 final</td><td class="mono">{{ result.document.final_sha256 }}</td></tr>
+        {% endif %}
+        <tr><td>Diunggah</td><td>{{ result.document.created_at }}</td></tr>
+      </table>
+
+      <h2>Tanda tangan</h2>
+      {% for sig in result.signatures %}
+        <div class="sig {{ 'sig-ok' if sig.valid else 'sig-bad' }}">
+          <div>
+            <span class="pill">{{ 'VALID' if sig.valid else 'TIDAK VALID' }}</span>
+            <span class="pill">INTACT: {{ 'ya' if sig.intact else 'tidak' }}</span>
+            <span class="pill">TRUSTED: {{ 'ya' if sig.trusted else 'tidak' }}</span>
+            <span class="pill">REVOKED: {{ 'ya' if sig.revoked else 'tidak' }}</span>
+          </div>
+          <p style="margin:12px 0 4px; font-weight:700;">
+            {{ sig.signer.get('common_name', '-') if sig.signer else '-' }}
+          </p>
+          <p style="margin:0; color:#5f6b7a;">
+            {{ sig.signer.get('organizational_unit_name', '') if sig.signer else '' }}
+            {% if sig.signer and sig.signer.get('serial_number') %} · NIP {{ sig.signer.get('serial_number') }}{% endif %}
+          </p>
+          <table>
+            <tr><td>Field</td><td class="mono">{{ sig.field_name }}</td></tr>
+            <tr><td>Serial sertifikat</td><td class="mono">{{ sig.serial or '-' }}</td></tr>
+            <tr><td>Waktu tanda tangan</td><td>{{ sig.signing_time or '-' }}</td></tr>
+            <tr><td>Timestamp</td><td>
+              {% if sig.timestamp %}
+                {{ 'valid' if sig.timestamp.valid else 'tidak valid' }}
+                ({{ 'trusted' if sig.timestamp.trusted else 'tidak trusted' }})
+              {% else %}-{% endif %}
+            </td></tr>
+            <tr><td>Ringkasan</td><td class="mono">{{ sig.summary }}</td></tr>
+          </table>
+        </div>
+      {% endfor %}
+
+      {% if result.document.download_url %}
+        <a class="btn" href="{{ result.document.download_url }}">Unduh PDF asli</a>
+      {% endif %}
+    {% endif %}
+
+    <p class="note">
+      Tanda tangan elektronik ini menggunakan Sertifikat Elektronik Internal
+      (non-PSrE) dan merupakan TTE Tidak Tersertifikasi. Keaslian dan integritas
+      dokumen dibuktikan melalui verifikasi kriptografis pada laman resmi ini.
+      <br><br>
+      <a href="/ca">Unduh sertifikat CA</a> ·
+      <a href="/ca/intermediate.crt">Intermediate CA</a> ·
+      <a href="/crl/stit.crl">CRL</a>
+    </p>
+  </div>
+</main>
+</body>
+</html>

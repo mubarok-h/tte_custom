@@ -1,0 +1,15 @@
+.venv/
+.git/
+.gitignore
+data/
+ca/dev/
+secrets/
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/
+docs/
+README.md
+*.p12
+*.key

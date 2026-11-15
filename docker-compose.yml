@@ -1,0 +1,49 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    environment:
+      TTE_DATA_DIR: /data
+      TTE_DATABASE_URL: ${TTE_DOCKER_DATABASE_URL:-sqlite:////data/tte.db}
+      TTE_SIGNING_P12: /data/pki/rektor.p12
+      TTE_ROOT_CA_PATH: /data/pki/root.crt
+      TTE_INTERMEDIATE_CA_PATH: /data/pki/intermediate.crt
+      TTE_CRL_PATH: /data/pki/crl/stit.crl
+      TTE_ROOT_CRL_PATH: /data/pki/crl/root.crl
+      TTE_TSA_ROOTS_DIR: /data/pki/tsa
+    volumes:
+      - ./data:/data
+      # Nitrokey HSM 2: gunakan pcscd dari host
+      # - /run/pcscd/pcscd.comm:/run/pcscd/pcscd.comm
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: tte
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tte}
+      POSTGRES_DB: tte
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:

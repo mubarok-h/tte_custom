@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+data/
+ca/dev/
+secrets/
+*.p12
+*.key
+!ca/**/README.md
