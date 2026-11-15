@@ -4,13 +4,14 @@ After=network.target
 
 [Service]
 Type=simple
-User=mubarok
-WorkingDirectory=/home/mubarok/Documents/tte_custom
-ExecStart=/home/mubarok/Documents/tte_custom/.venv/bin/uvicorn tte_core.app:app --host 0.0.0.0 --port 8000
+User=tte
+Group=tte
+WorkingDirectory=/opt/tte
+ExecStart=/opt/tte/.venv/bin/uvicorn tte_core.app:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=3
 # Batasi akses tulis hanya ke data aplikasi
-ReadWritePaths=/home/mubarok/Documents/tte_custom/data
+ReadWritePaths=/opt/tte/data
 
 [Install]
 WantedBy=multi-user.target
