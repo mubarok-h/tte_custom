@@ -1,0 +1,108 @@
+{% extends "admin/base.html" %}
+{% block title %}Permintaan Tanda Tangan{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Permintaan Tanda Tangan</h4>
+    <p class="page-subtitle">Alur: pending → consent → signed. Tanda tangan hanya dapat dilakukan setelah consent tercatat.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/admin/documents">
+    <i class="bx bx-file me-1"></i>Pilih dokumen
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" action="/admin/requests" class="row g-3 align-items-end">
+      <div class="col-12 col-md-4">
+        <label for="status" class="form-label">Status</label>
+        <select id="status" name="status" class="form-select">
+          <option value="">Semua status</option>
+          {% for item in statuses %}
+          <option value="{{ item }}" {{ 'selected' if status == item else '' }}>{{ item }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-8 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">
+          <i class="bx bx-filter-alt me-1"></i>Terapkan
+        </button>
+        {% if status %}
+        <a class="btn btn-outline-secondary" href="/admin/requests">Reset</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  {% if requests %}
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Dokumen</th>
+          <th>Penanda tangan</th>
+          <th>Alasan</th>
+          <th>Status</th>
+          <th>Dibuat</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for req in requests %}
+        <tr>
+          <td>
+            <a class="mono doc-link" href="/admin/documents/{{ req.document_id }}">
+              {{ req.document.short_id if req.document else req.document_id[:8] }}
+            </a>
+            {% if req.document %}
+            <div class="small text-muted">{{ req.document.filename }}</div>
+            {% endif %}
+          </td>
+          <td>
+            {{ req.signer.name if req.signer else '—' }}
+            <div class="small text-muted">{{ req.signer.nip if req.signer else '' }}</div>
+          </td>
+          <td class="small">{{ req.reason or '—' }}</td>
+          <td>
+            <span class="badge bg-label-{{ badge_class(req.status) }}">{{ req.status }}</span>
+            {% if req.consent_at %}
+            <div class="small text-muted">consent {{ req.consent_at | tanggal }}</div>
+            {% endif %}
+          </td>
+          <td class="small text-muted text-nowrap">{{ req.created_at | tanggal }}</td>
+          <td class="text-end table-actions text-nowrap">
+            {% if req.status == 'pending' %}
+            <form method="post" action="/admin/requests/{{ req.id }}/consent" class="inline-form">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="next" value="/admin/requests">
+              <button class="btn btn-sm btn-outline-primary" type="submit">Setujui</button>
+            </form>
+            {% endif %}
+            {% if req.status == 'consented' %}
+            <form method="post" action="/admin/requests/{{ req.id }}/sign" class="inline-form">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="next" value="/admin/requests">
+              <button class="btn btn-sm btn-primary" type="submit">Tandatangani</button>
+            </form>
+            {% endif %}
+            {% if req.status == 'signed' %}
+            <span class="small text-muted">Selesai</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bx bx-task"></i>
+    Tidak ada permintaan dengan status tersebut.
+  </div>
+  {% endif %}
+
+  <div class="card-body pt-0">
+    {% include "admin/_pagination.html" %}
+  </div>
+</div>
+{% endblock %}

@@ -1,33 +1,119 @@
-<!doctype html>
-<html lang="id">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ institution }} — Verifikasi TTE</title>
-  <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; background: #f6f7f9; color: #17202a; }
-    main { max-width: 760px; margin: 0 auto; padding: 48px 20px; }
-    .card { background: #fff; border: 1px solid #e3e7ec; border-radius: 14px; padding: 28px; }
-    h1 { margin-top: 0; font-size: 1.5rem; }
-    code { background: #eef1f4; padding: 2px 6px; border-radius: 6px; }
-    a { color: #0b57d0; }
-    .muted { color: #5f6b7a; }
-  </style>
-</head>
-<body>
-<main>
-  <div class="card">
-    <h1>{{ institution }}</h1>
-    <p>Layanan verifikasi Tanda Tangan Elektronik (TTE) internal.</p>
-    <p class="muted">TTE ini menggunakan Sertifikat Elektronik Internal {{ institution }} (non-PSrE)
-      dan merupakan TTE Tidak Tersertifikasi.</p>
-    <ul>
-      <li><a href="/ca">Sertifikat &amp; fingerprint CA</a></li>
-      <li><a href="/docs">Dokumentasi API</a></li>
-    </ul>
-    <p class="muted">Halaman verifikasi dokumen: <code>{{ verify_base_url }}/v/&lt;short_id&gt;?t=&lt;token&gt;</code></p>
+{% extends "public/base.html" %}
+{% block title %}Verifikasi & Permohonan Surat{% endblock %}
+{% block content %}
+<section class="hero-dark">
+  <div class="hero-content">
+    <div class="hero-pill">
+      <span class="dot"></span>
+      Layanan Persuratan &amp; TTE Internal · Aktif 24 Jam
+    </div>
+    <h1>
+      Urus Surat Akademik
+      <span class="grad">Lebih Cepat &amp; Terverifikasi.</span>
+    </h1>
+    <p>
+      Ajukan surat keterangan aktif kuliah, surat pengantar penelitian, atau
+      surat akademik lain langsung dari ponsel. Tata Usaha memproses, lalu
+      dokumen diterbitkan dengan tanda tangan elektronik {{ institution }}.
+    </p>
+    <div class="hero-actions">
+      <a class="btn-light" href="/permohonan">
+        <i class="bx bx-paper-plane"></i>Ajukan Permohonan Surat
+      </a>
+      <a class="btn-glass" href="/permohonan/status">
+        <i class="bx bx-search"></i>Lacak Status Surat
+      </a>
+    </div>
+    <div class="hero-trust">
+      <span><i class="bx bx-check-circle"></i>PAdES B-B / B-T / B-LT</span>
+      <span><i class="bx bx-qr"></i>QR Verifikasi</span>
+      <span><i class="bx bx-shield-quarter"></i>Audit Hash-Chain</span>
+    </div>
   </div>
-</main>
-</body>
-</html>
+</section>
+
+<div class="quick-grid">
+  <a class="quick" href="/permohonan">
+    <span class="quick-icon teal"><i class="bx bx-paper-plane"></i></span>
+    <div>
+      <h3>Ajukan Surat <i class="bx bx-up-arrow-alt"></i></h3>
+      <p>Isi formulir digital untuk surat aktif kuliah, penelitian, atau surat akademik lain.</p>
+    </div>
+  </a>
+  <a class="quick" href="/permohonan/status">
+    <span class="quick-icon coral"><i class="bx bx-search"></i></span>
+    <div>
+      <h3>Lacak Status <i class="bx bx-up-arrow-alt"></i></h3>
+      <p>Pantau proses verifikasi dan penerbitan surat menggunakan NIM atau nomor permohonan.</p>
+    </div>
+  </a>
+  <a class="quick" href="/permohonan/validasi">
+    <span class="quick-icon purple"><i class="bx bx-badge-check"></i></span>
+    <div>
+      <h3>Validasi Surat <i class="bx bx-up-arrow-alt"></i></h3>
+      <p>Periksa keabsahan nomor surat resmi yang diterbitkan Tata Usaha.</p>
+    </div>
+  </a>
+  <a class="quick" href="/admin">
+    <span class="quick-icon navy"><i class="bx bx-lock"></i></span>
+    <div>
+      <h3>Panel Admin <i class="bx bx-up-arrow-alt"></i></h3>
+      <p>Kelola permohonan, master data, pengguna, dan tanda tangan elektronik.</p>
+    </div>
+  </a>
+</div>
+
+<section class="card" style="margin-top:20px">
+  <div class="eyebrow"><i class="bx bx-list-check"></i>Alur layanan</div>
+  <h2 style="margin-top:14px">Empat langkah, transparan</h2>
+  <div class="flow-grid">
+    <div class="flow-step">
+      <span class="step-num">1</span>
+      <strong>Ajukan</strong>
+      <span>Lengkapi identitas, data akademik, dan jenis surat yang dibutuhkan.</span>
+    </div>
+    <div class="flow-step">
+      <span class="step-num">2</span>
+      <strong>Verifikasi TU</strong>
+      <span>Tata Usaha memeriksa kesesuaian data dan kelengkapan permohonan.</span>
+    </div>
+    <div class="flow-step">
+      <span class="step-num">3</span>
+      <strong>Persetujuan</strong>
+      <span>Permohonan disetujui dan nomor surat resmi diterbitkan.</span>
+    </div>
+    <div class="flow-step">
+      <span class="step-num">4</span>
+      <strong>TTE &amp; Validasi</strong>
+      <span>Dokumen ditandatangani elektronik, lalu dapat divalidasi keasliannya.</span>
+    </div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/permohonan"><i class="bx bx-paper-plane"></i>Mulai Permohonan</a>
+    <a class="btn secondary" href="/permohonan/validasi"><i class="bx bx-badge-check"></i>Validasi Surat</a>
+  </div>
+</section>
+
+<section class="card" style="margin-top:20px">
+  <div class="eyebrow"><i class="bx bx-shield-quarter"></i>Verifikasi dokumen</div>
+  <h2 style="margin-top:14px">Cek keaslian PDF bertanda tangan</h2>
+  <p class="lead">
+    Setiap PDF yang ditandatangani memuat tautan dan QR menuju halaman verifikasi.
+    Halaman tersebut memeriksa integritas dokumen dan status sertifikat secara
+    kriptografis, bukan sekadar membaca gambar QR.
+  </p>
+  <p class="lead" style="margin-top:14px">
+    Format tautan: <code>{{ verify_base_url }}/v/&lt;short_id&gt;?t=&lt;token&gt;</code>
+  </p>
+  <div class="actions">
+    <a class="btn secondary" href="/permohonan/validasi"><i class="bx bx-badge-check"></i>Validasi Surat</a>
+  </div>
+</section>
+
+<div class="notice">
+  <strong>Tentang layanan ini.</strong>
+  Aplikasi ini merupakan layanan <strong>tanda tangan elektronik
+  {{ institution }} Cirebon</strong>. Setiap dokumen ditandatangani secara
+  kriptografis dan dapat diverifikasi keasliannya melalui portal ini.
+</div>
+{% endblock %}

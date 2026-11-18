@@ -6,7 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import Settings
-from .models import Document, VerificationToken
+from .models import (
+    Document,
+    SignatureRecord,
+    SignRequest,
+    SignerProfile,
+    VerificationToken,
+)
 from .tokens import verify_token
 from .verification import validate_pdf_bytes
 
@@ -24,6 +30,39 @@ def get_document_by_short_id(
     return db.execute(
         select(Document).where(Document.short_id == short_id)
     ).scalar_one_or_none()
+
+
+def signer_profiles_for_document(
+    db: Session, document_id: str
+) -> dict[str, dict]:
+    rows = db.execute(
+        select(SignatureRecord, SignerProfile)
+        .join(
+            SignRequest,
+            SignatureRecord.sign_request_id == SignRequest.id,
+        )
+        .join(SignerProfile, SignRequest.signer_id == SignerProfile.id)
+        .where(SignatureRecord.document_id == document_id)
+    ).all()
+    return {
+        record.field_name: {
+            "name": signer.name,
+            "jabatan": signer.jabatan,
+            "nip": signer.nip,
+            "email": signer.email,
+        }
+        for record, signer in rows
+    }
+
+
+def enrich_signature_profiles(
+    db: Session, document_id: str, result: dict
+) -> dict:
+    profiles = signer_profiles_for_document(db, document_id)
+    for signature in result.get("signatures", []):
+        profile = profiles.get(signature.get("field_name") or "")
+        signature["signer_profile"] = profile
+    return result
 
 
 def verify_document(
@@ -74,4 +113,5 @@ def verify_document(
         ),
         "verify_url": f"{settings.verify_base_url}/v/{doc.short_id}?t={token}",
     }
+    enrich_signature_profiles(db, doc.id, result)
     return result

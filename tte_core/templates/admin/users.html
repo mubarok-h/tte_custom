@@ -1,0 +1,280 @@
+{% extends "admin/base.html" %}
+{% block title %}Pengguna{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Pengguna</h4>
+    <p class="page-subtitle">Kelola akun multi-user dan hak akses panel admin.</p>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header">
+        <form method="get" action="/admin/users" class="row g-3 align-items-end">
+          <div class="col-12 col-md-6">
+            <label for="q" class="form-label">Cari</label>
+            <input id="q" name="q" type="text" class="form-control" value="{{ q }}" placeholder="Nama, username, atau email">
+          </div>
+          <div class="col-12 col-md-3">
+            <label for="role" class="form-label">Role</label>
+            <select id="role" name="role" class="form-select">
+              <option value="">Semua</option>
+              {% for item in roles %}
+              <option value="{{ item }}" {{ 'selected' if role == item else '' }}>{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-3 d-flex gap-2">
+            <button class="btn btn-primary" type="submit"><i class="bx bx-filter-alt me-1"></i>Filter</button>
+            {% if q or role %}<a class="btn btn-outline-secondary" href="/admin/users">Reset</a>{% endif %}
+          </div>
+        </form>
+      </div>
+
+      {% if users %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr><th>Nama</th><th>Username</th><th>Role</th><th>Status</th><th>Login terakhir</th><th class="text-end">Aksi</th></tr>
+          </thead>
+          <tbody>
+            {% for user in users %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ user.name }}</div>
+                {% if user.email %}<div class="small text-muted">{{ user.email }}</div>{% endif %}
+                {% if current_user and current_user.id == user.id %}
+                <span class="badge bg-label-info">akun Anda</span>
+                {% endif %}
+              </td>
+              <td class="mono">{{ user.username }}</td>
+              <td>
+                <span class="badge bg-label-{{ 'primary' if user.role == 'admin' else 'secondary' }}">
+                  {{ 'Administrator' if user.role == 'admin' else 'Operator TU' }}
+                </span>
+              </td>
+              <td>
+                <span class="badge bg-label-{{ 'success' if user.is_active else 'secondary' }}">
+                  {{ 'aktif' if user.is_active else 'nonaktif' }}
+                </span>
+              </td>
+              <td class="small text-muted text-nowrap">{{ user.last_login_at | tanggal }}</td>
+              <td class="text-end">
+                <div class="dropdown">
+                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Aksi
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                      <button type="button" class="dropdown-item"
+                              data-bs-toggle="modal" data-bs-target="#userEditModal"
+                              data-action="/admin/users/{{ user.id }}/edit"
+                              data-name="{{ user.name }}"
+                              data-username="{{ user.username }}"
+                              data-email="{{ user.email or '' }}"
+                              data-role="{{ user.role }}"
+                              data-self="{{ '1' if current_user and current_user.id == user.id else '0' }}">
+                        <i class="bx bx-edit me-2"></i>Edit data pengguna
+                      </button>
+                    </li>
+                    <li>
+                      <button type="button" class="dropdown-item"
+                              data-bs-toggle="modal" data-bs-target="#passwordModal"
+                              data-action="/admin/users/{{ user.id }}/password"
+                              data-user="{{ user.username }}">
+                        <i class="bx bx-key me-2"></i>Reset password
+                      </button>
+                    </li>
+                    {% if not (current_user and current_user.id == user.id) %}
+                    <li>
+                      <form method="post" action="/admin/users/{{ user.id }}/status">
+                        <input type="hidden" name="csrf" value="{{ csrf }}">
+                        <button class="dropdown-item" type="submit">
+                          <i class="bx bx-power-off me-2"></i>{{ 'Nonaktifkan' if user.is_active else 'Aktifkan' }}
+                        </button>
+                      </form>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                      <form method="post" action="/admin/users/{{ user.id }}/delete"
+                            onsubmit="return confirm('Hapus pengguna ini? Tindakan ini tidak dapat dibatalkan.')">
+                        <input type="hidden" name="csrf" value="{{ csrf }}">
+                        <button class="dropdown-item text-danger" type="submit">
+                          <i class="bx bx-trash me-2"></i>Hapus pengguna
+                        </button>
+                      </form>
+                    </li>
+                    {% endif %}
+                  </ul>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <i class="bx bx-group"></i>
+        Belum ada pengguna yang cocok.
+      </div>
+      {% endif %}
+
+      <div class="card-body pt-0">
+        {% include "admin/_pagination.html" %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Tambah pengguna</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" action="/admin/users">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <div class="mb-3">
+            <label for="name" class="form-label">Nama lengkap</label>
+            <input id="name" name="name" type="text" class="form-control" required placeholder="Nama pengguna">
+          </div>
+          <div class="mb-3">
+            <label for="username" class="form-label">Username</label>
+            <input id="username" name="username" type="text" class="form-control" required placeholder="mis. operator1">
+          </div>
+          <div class="mb-3">
+            <label for="email" class="form-label">Email (opsional)</label>
+            <input id="email" name="email" type="email" class="form-control" placeholder="nama@stit-buntetpesantren.ac.id">
+          </div>
+          <div class="mb-3">
+            <label for="role-new" class="form-label">Role</label>
+            <select id="role-new" name="role" class="form-select">
+              <option value="operator">Operator TU</option>
+              <option value="admin">Administrator</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="password" class="form-label">Password awal</label>
+            <input id="password" name="password" type="password" class="form-control" required minlength="8" placeholder="Minimal 8 karakter">
+          </div>
+          <button class="btn btn-primary w-100" type="submit"><i class="bx bx-user-plus me-1"></i>Simpan pengguna</button>
+        </form>
+        <div class="form-note mt-3">
+          Administrator dapat mengelola pengguna dan master data. Operator TU
+          dapat memproses surat, dokumen, penanda tangan, dan audit.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="userEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" id="userEditForm">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit pengguna</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="edit-name" class="form-label">Nama lengkap</label>
+            <input id="edit-name" name="name" type="text" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label for="edit-username" class="form-label">Username</label>
+            <input id="edit-username" name="username" type="text" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label for="edit-email" class="form-label">Email</label>
+            <input id="edit-email" name="email" type="email" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label for="edit-role" class="form-label">Role</label>
+            <select id="edit-role" name="role" class="form-select">
+              <option value="operator">Operator TU</option>
+              <option value="admin">Administrator</option>
+            </select>
+            <div class="form-note mt-1" id="edit-role-note" hidden>Role akun sendiri tidak dapat diturunkan.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="passwordModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" id="passwordForm">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Reset password</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-3">Atur password baru untuk <strong id="passwordUser"></strong>.</p>
+          <label for="new-password" class="form-label">Password baru</label>
+          <input id="new-password" name="password" type="password" class="form-control" required minlength="8" placeholder="Minimal 8 karakter">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    const modal = document.getElementById('passwordModal');
+    if (!modal) return;
+    modal.addEventListener('show.bs.modal', function (event) {
+      const trigger = event.relatedTarget;
+      document.getElementById('passwordForm').action = trigger.getAttribute('data-action');
+      document.getElementById('passwordUser').textContent = trigger.getAttribute('data-user');
+      document.getElementById('new-password').value = '';
+    });
+
+    const editModal = document.getElementById('userEditModal');
+    if (editModal) {
+      editModal.addEventListener('show.bs.modal', function (event) {
+        const trigger = event.relatedTarget;
+        document.getElementById('userEditForm').action = trigger.getAttribute('data-action');
+        document.getElementById('edit-name').value = trigger.getAttribute('data-name') || '';
+        document.getElementById('edit-username').value = trigger.getAttribute('data-username') || '';
+        document.getElementById('edit-email').value = trigger.getAttribute('data-email') || '';
+        const role = document.getElementById('edit-role');
+        role.value = trigger.getAttribute('data-role') || 'operator';
+        const isSelf = trigger.getAttribute('data-self') === '1';
+        role.disabled = isSelf;
+        document.getElementById('edit-role-note').hidden = !isSelf;
+
+        let hiddenRole = document.getElementById('edit-role-hidden');
+        if (isSelf) {
+          if (!hiddenRole) {
+            hiddenRole = document.createElement('input');
+            hiddenRole.type = 'hidden';
+            hiddenRole.id = 'edit-role-hidden';
+            hiddenRole.name = 'role';
+            document.getElementById('userEditForm').appendChild(hiddenRole);
+          }
+          hiddenRole.value = 'admin';
+        } else if (hiddenRole) {
+          hiddenRole.remove();
+        }
+      });
+    }
+  })();
+</script>
+{% endblock %}

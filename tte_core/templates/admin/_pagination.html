@@ -1,0 +1,26 @@
+{% if pagination and pagination.pages > 1 %}
+<nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3" aria-label="Navigasi halaman">
+  <span class="small text-muted">
+    Halaman {{ pagination.page }} dari {{ pagination.pages }} · {{ pagination.total }} data
+  </span>
+  <ul class="pagination pagination-sm mb-0">
+    <li class="page-item {{ 'disabled' if not pagination.prev_url else '' }}">
+      {% if pagination.prev_url %}
+        <a class="page-link" href="{{ pagination.prev_url }}">← Sebelumnya</a>
+      {% else %}
+        <span class="page-link">← Sebelumnya</span>
+      {% endif %}
+    </li>
+    <li class="page-item active" aria-current="page">
+      <span class="page-link">{{ pagination.page }}</span>
+    </li>
+    <li class="page-item {{ 'disabled' if not pagination.next_url else '' }}">
+      {% if pagination.next_url %}
+        <a class="page-link" href="{{ pagination.next_url }}">Berikutnya →</a>
+      {% else %}
+        <span class="page-link">Berikutnya →</span>
+      {% endif %}
+    </li>
+  </ul>
+</nav>
+{% endif %}

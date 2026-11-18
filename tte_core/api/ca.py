@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
+from ..admin_auth import require_admin
 from ..config import get_settings
 from ..pki import PkiError, load_cert
 
 router = APIRouter(tags=["pki"])
 _TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES))
+templates.env.globals["current_year"] = datetime.now().year
 
 
 def _fingerprint(path: Path) -> str | None:
@@ -25,7 +28,7 @@ def _fingerprint(path: Path) -> str | None:
 
 
 @router.get("/ca", response_class=HTMLResponse)
-def ca_page(request: Request) -> HTMLResponse:
+def ca_page(request: Request, _admin=Depends(require_admin)) -> HTMLResponse:
     settings = get_settings()
     return templates.TemplateResponse(
         request,
@@ -43,7 +46,7 @@ def ca_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/ca/root.crt")
-def root_certificate() -> FileResponse:
+def root_certificate(_admin=Depends(require_admin)) -> FileResponse:
     path = get_settings().root_ca_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Root CA belum tersedia.")
@@ -55,7 +58,7 @@ def root_certificate() -> FileResponse:
 
 
 @router.get("/ca/intermediate.crt")
-def intermediate_certificate() -> FileResponse:
+def intermediate_certificate(_admin=Depends(require_admin)) -> FileResponse:
     path = get_settings().intermediate_ca_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Intermediate CA belum tersedia.")
@@ -67,7 +70,7 @@ def intermediate_certificate() -> FileResponse:
 
 
 @router.get("/crl/stit.crl")
-def crl() -> FileResponse:
+def crl(_admin=Depends(require_admin)) -> FileResponse:
     path = get_settings().crl_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="CRL belum tersedia.")
@@ -79,7 +82,7 @@ def crl() -> FileResponse:
 
 
 @router.get("/crl/root.crl")
-def root_crl() -> FileResponse:
+def root_crl(_admin=Depends(require_admin)) -> FileResponse:
     path = get_settings().root_crl_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Root CRL belum tersedia.")

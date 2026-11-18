@@ -1,0 +1,194 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ letter.request_no }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/admin/letters">Permintaan Surat</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ letter.request_no }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">{{ letter.letter_type }}</h4>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <span class="badge bg-label-{{ badge_class(letter.status) }}">{{ letter_status_label(letter.status) }}</span>
+      <span class="mono text-muted">{{ letter.request_no }}</span>
+      {% if letter.letter_no %}<span class="badge bg-label-secondary">{{ letter.letter_no }}</span>{% endif %}
+    </div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/admin/letters">← Kembali</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-8">
+    <div class="card mb-4">
+      <div class="card-header"><h5 class="card-title mb-0">Data pemohon</h5></div>
+      <div class="card-body">
+        <dl class="row doc-facts mb-0">
+          <dt class="col-sm-3">Nama</dt><dd class="col-sm-9">{{ letter.applicant_name }}</dd>
+          <dt class="col-sm-3">NIM</dt><dd class="col-sm-9 mono">{{ letter.nim }}</dd>
+          <dt class="col-sm-3">Email</dt><dd class="col-sm-9">{{ letter.email }}</dd>
+          <dt class="col-sm-3">WhatsApp</dt><dd class="col-sm-9">{{ letter.phone or '—' }}</dd>
+          <dt class="col-sm-3">Tempat / Tgl Lahir</dt>
+          <dd class="col-sm-9">{{ letter.birth_place or '—' }}{% if letter.birth_date %} · {{ letter.birth_date | tanggal }}{% endif %}</dd>
+          <dt class="col-sm-3">Alamat</dt><dd class="col-sm-9">{{ letter.address or '—' }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header"><h5 class="card-title mb-0">Data akademik &amp; layanan</h5></div>
+      <div class="card-body">
+        <dl class="row doc-facts mb-0">
+          <dt class="col-sm-3">Lembaga</dt><dd class="col-sm-9">{{ letter.institution_name or '—' }}</dd>
+          <dt class="col-sm-3">Fakultas</dt><dd class="col-sm-9">{{ letter.faculty_name or '—' }}</dd>
+          <dt class="col-sm-3">Program Studi</dt><dd class="col-sm-9">{{ letter.program_name or '—' }}</dd>
+          <dt class="col-sm-3">Semester</dt><dd class="col-sm-9">{{ letter.semester or '—' }}</dd>
+          <dt class="col-sm-3">Tahun Akademik</dt><dd class="col-sm-9">{{ letter.academic_year or '—' }}</dd>
+          <dt class="col-sm-3">Jenis Surat</dt><dd class="col-sm-9">{{ letter.letter_type }}</dd>
+          <dt class="col-sm-3">Tujuan</dt><dd class="col-sm-9">{{ letter.purpose or '—' }}</dd>
+          <dt class="col-sm-3">Keperluan</dt><dd class="col-sm-9">{{ letter.notes or '—' }}</dd>
+          {% if letter.research_title %}
+          <dt class="col-sm-3">Judul Penelitian</dt><dd class="col-sm-9">{{ letter.research_title }}</dd>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">Riwayat proses</h5></div>
+      <div class="card-body">
+        <div class="timeline">
+          <div class="timeline-item done">
+            <span class="timeline-dot"></span>
+            <div>
+              <div class="timeline-title">Diajukan</div>
+              <div class="timeline-meta">{{ letter.submitted_at | tanggal }}</div>
+            </div>
+          </div>
+          <div class="timeline-item {{ 'done' if letter.verified_at else ('active' if letter.status == 'submitted' else '') }}">
+            <span class="timeline-dot"></span>
+            <div>
+              <div class="timeline-title">Diverifikasi</div>
+              <div class="timeline-meta">
+                {% if letter.verified_at %}{{ letter.verified_at | tanggal }}{% if letter.verified_by %} · {{ letter.verified_by }}{% endif %}{% else %}Menunggu verifikasi{% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="timeline-item {{ 'done' if letter.approved_at and letter.status != 'rejected' else ('active' if letter.status == 'verified' else '') }}">
+            <span class="timeline-dot"></span>
+            <div>
+              <div class="timeline-title">Disetujui</div>
+              <div class="timeline-meta">
+                {% if letter.approved_at %}{{ letter.approved_at | tanggal }}{% if letter.approved_by %} · {{ letter.approved_by }}{% endif %}{% if letter.letter_no %} · {{ letter.letter_no }}{% endif %}{% else %}Menunggu persetujuan{% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="timeline-item {{ 'done' if letter.status == 'signed' else ('active' if letter.status == 'approved' else '') }}">
+            <span class="timeline-dot"></span>
+            <div>
+              <div class="timeline-title">Terbit dengan TTE</div>
+              <div class="timeline-meta">
+                {% if letter.status == 'signed' %}Dokumen sudah ditandatangani.{% else %}Menunggu unggah PDF final dan proses TTE.{% endif %}
+              </div>
+            </div>
+          </div>
+          {% if letter.status == 'rejected' %}
+          <div class="timeline-item rejected">
+            <span class="timeline-dot"></span>
+            <div>
+              <div class="timeline-title">Ditolak</div>
+              <div class="timeline-meta">{{ letter.rejected_at | tanggal }} — {{ letter.rejection_reason or 'Tanpa alasan.' }}</div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    {% if letter.status == 'submitted' %}
+    <div class="card mb-4">
+      <div class="card-header"><h5 class="card-title mb-0">Verifikasi</h5></div>
+      <div class="card-body">
+        <p class="small text-muted">Periksa data pemohon dan kesesuaian layanan sebelum meneruskan ke persetujuan.</p>
+        <form method="post" action="/admin/letters/{{ letter.id }}/verify">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="next" value="{{ current_path }}">
+          <button class="btn btn-primary w-100" type="submit"><i class="bx bx-check-double me-1"></i>Verifikasi permohonan</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if letter.status in ('submitted', 'verified') %}
+    <div class="card mb-4">
+      <div class="card-header"><h5 class="card-title mb-0">Setujui &amp; terbitkan nomor</h5></div>
+      <div class="card-body">
+        <form method="post" action="/admin/letters/{{ letter.id }}/approve">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="next" value="{{ current_path }}">
+          <div class="mb-3">
+            <label for="letter_no" class="form-label">Nomor surat resmi</label>
+            <input id="letter_no" name="letter_no" class="form-control mono" required placeholder="B-1204/Un.05/Ps/PP.00.9/11/2026">
+          </div>
+          <button class="btn btn-primary w-100" type="submit"><i class="bx bx-badge-check me-1"></i>Setujui permohonan</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if letter.status in ('approved', 'signed') %}
+    <div class="card mb-4">
+      <div class="card-header"><h5 class="card-title mb-0">Dokumen &amp; TTE</h5></div>
+      <div class="card-body">
+        {% if document %}
+        <div class="mb-3">
+          <div class="small text-muted">Dokumen terhubung</div>
+          <a class="doc-link" href="/admin/documents/{{ document.id }}">{{ document.short_id }} · {{ document.filename }}</a>
+          <div class="small text-muted mt-1">
+            Status: <span class="badge bg-label-{{ badge_class(document.status) }}">{{ document.status }}</span>
+          </div>
+        </div>
+        <a class="btn btn-outline-primary w-100" href="/admin/documents/{{ document.id }}">
+          <i class="bx bx-pen me-1"></i>Buka dokumen untuk TTE
+        </a>
+        {% elif letter.status == 'approved' %}
+        <p class="small text-muted">Unggah PDF final surat. Setelah terhubung, buat permintaan TTE dari halaman dokumen.</p>
+        <form method="post" action="/admin/letters/{{ letter.id }}/document" enctype="multipart/form-data">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <div class="mb-3">
+            <label for="file" class="form-label">PDF final</label>
+            <input id="file" name="file" type="file" class="form-control" accept="application/pdf,.pdf" required>
+          </div>
+          <button class="btn btn-primary w-100" type="submit"><i class="bx bx-upload me-1"></i>Unggah &amp; hubungkan</button>
+        </form>
+        {% endif %}
+        {% if letter.letter_no %}
+        <div class="form-note mt-3">Nomor surat: <span class="mono">{{ letter.letter_no }}</span></div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if letter.status not in ('signed', 'rejected') %}
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">Tolak permohonan</h5></div>
+      <div class="card-body">
+        <form method="post" action="/admin/letters/{{ letter.id }}/reject">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="next" value="{{ current_path }}">
+          <div class="mb-3">
+            <label for="reason" class="form-label">Alasan penolakan</label>
+            <textarea id="reason" name="reason" class="form-control" required></textarea>
+          </div>
+          <button class="btn btn-outline-secondary w-100" type="submit">Tolak permohonan</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

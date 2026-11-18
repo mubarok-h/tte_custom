@@ -1,0 +1,289 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Dashboard</h4>
+    <p class="page-subtitle">Ringkasan dokumen, permintaan tanda tangan, dan kesehatan audit log.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary" href="/admin/signers">
+      <i class="bx bx-user-plus me-1"></i>Kelola penanda tangan
+    </a>
+    <a class="btn btn-primary" href="/admin/documents">
+      <i class="bx bx-upload me-1"></i>Unggah dokumen
+    </a>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-12 col-sm-6 col-xl">
+    <div class="card stat-card stat-primary h-100">
+      <div class="card-body">
+        <div>
+          <div class="stat-label">Dokumen</div>
+          <div class="stat-value">{{ document_total }}</div>
+          <div class="small text-muted">{{ unsigned_total }} belum ditandatangani</div>
+        </div>
+        <div class="stat-icon"><i class="bx bx-file"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl">
+    <div class="card stat-card stat-success h-100">
+      <div class="card-body">
+        <div>
+          <div class="stat-label">Ditandatangani</div>
+          <div class="stat-value">{{ signed_total }}</div>
+          <div class="small text-muted">PDF final tersimpan</div>
+        </div>
+        <div class="stat-icon"><i class="bx bx-check-shield"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl">
+    <div class="card stat-card stat-blue h-100">
+      <div class="card-body">
+        <div>
+          <div class="stat-label">Surat</div>
+          <div class="stat-value">{{ letter_pending }}</div>
+          <div class="small text-muted">{{ letter_approved }} sudah terbit</div>
+        </div>
+        <div class="stat-icon"><i class="bx bx-envelope"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl">
+    <div class="card stat-card stat-warning h-100">
+      <div class="card-body">
+        <div>
+          <div class="stat-label">Permintaan</div>
+          <div class="stat-value">{{ active_requests }}</div>
+          <div class="small text-muted">aktif menunggu consent / tanda tangan</div>
+        </div>
+        <div class="stat-icon"><i class="bx bx-time-five"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl">
+    <div class="card stat-card stat-info h-100">
+      <div class="card-body">
+        <div>
+          <div class="stat-label">Penanda tangan</div>
+          <div class="stat-value">{{ signer_total }}</div>
+          <div class="small text-muted">{{ active_signer_total }} aktif</div>
+        </div>
+        <div class="stat-icon"><i class="bx bx-user-check"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl">
+    <div class="card stat-card stat-dark h-100">
+      <div class="card-body">
+        <div>
+          <div class="stat-label">Audit event</div>
+          <div class="stat-value">{{ audit_total }}</div>
+          <div class="small text-muted">
+            <span class="status-dot {{ 'ok' if chain_ok else 'bad' }}"></span>
+            {{ 'rantai valid' if chain_ok else 'rantai rusak' }}
+          </div>
+        </div>
+        <div class="stat-icon"><i class="bx bx-history"></i></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if letter_pending %}
+<div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2" role="alert">
+  <div class="d-flex align-items-center gap-2">
+    <i class="bx bx-envelope fs-5"></i>
+    <span><strong>{{ letter_pending }}</strong> permohonan surat menunggu verifikasi / persetujuan.</span>
+  </div>
+  <a class="btn btn-sm btn-primary" href="/admin/letters?status=submitted">Proses sekarang</a>
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-12 col-lg-7">
+    <div class="card mb-4">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="card-title mb-0">Dokumen terbaru</h5>
+        <a href="/admin/documents" class="small">Lihat semua <i class="bx bx-right-arrow-alt"></i></a>
+      </div>
+      {% if recent_documents %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr><th>ID</th><th>Nama berkas</th><th>Status</th><th>Diunggah</th></tr>
+          </thead>
+          <tbody>
+            {% for doc in recent_documents %}
+            <tr>
+              <td><a class="mono doc-link" href="/admin/documents/{{ doc.id }}">{{ doc.short_id }}</a></td>
+              <td>{{ doc.filename }}</td>
+              <td><span class="badge bg-label-{{ badge_class(doc.status) }}">{{ doc.status }}</span></td>
+              <td class="small text-muted text-nowrap">{{ doc.created_at | tanggal }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <i class="bx bx-file"></i>
+        Belum ada dokumen. Unggah PDF pertama lewat menu <a href="/admin/documents">Dokumen</a>.
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="card-title mb-0">Permintaan terbaru</h5>
+        <a href="/admin/requests" class="small">Lihat semua <i class="bx bx-right-arrow-alt"></i></a>
+      </div>
+      {% if recent_requests %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>Dokumen</th><th>Penanda tangan</th><th>Status</th><th>Dibuat</th></tr></thead>
+          <tbody>
+            {% for req in recent_requests %}
+            <tr>
+              <td>
+                <a class="mono doc-link" href="/admin/documents/{{ req.document_id }}">
+                  {{ req.document.short_id if req.document else req.document_id[:8] }}
+                </a>
+              </td>
+              <td>{{ req.signer.name if req.signer else '-' }}</td>
+              <td><span class="badge bg-label-{{ badge_class(req.status) }}">{{ req.status }}</span></td>
+              <td class="small text-muted text-nowrap">{{ req.created_at | tanggal }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <i class="bx bx-task"></i>
+        Belum ada permintaan tanda tangan.
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card mt-4">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="card-title mb-0">Permohonan surat terbaru</h5>
+        <a href="/admin/letters" class="small">Lihat semua <i class="bx bx-right-arrow-alt"></i></a>
+      </div>
+      {% if recent_letters %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>Nomor</th><th>Pemohon</th><th>Layanan</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for letter in recent_letters %}
+            <tr>
+              <td class="nowrap"><a class="mono doc-link" href="/admin/letters/{{ letter.id }}">{{ letter.request_no }}</a></td>
+              <td>{{ letter.applicant_name }}<div class="small text-muted">NIM {{ letter.nim }}</div></td>
+              <td class="small">{{ letter.letter_type }}</td>
+              <td><span class="badge bg-label-{{ badge_class(letter.status) }}">{{ letter_status_label(letter.status) }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <i class="bx bx-envelope"></i>
+        Belum ada permohonan surat.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Status sistem</h5>
+      </div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item d-flex justify-content-between align-items-start gap-3">
+          <div>
+            <div class="fw-semibold">Kunci tanda tangan</div>
+            <div class="small text-muted">{{ signing_key }}</div>
+          </div>
+          <span class="badge bg-label-{{ 'success' if signing_key_ok else 'danger' }}">
+            {{ 'siap' if signing_key_ok else 'periksa' }}
+          </span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-start gap-3">
+          <div>
+            <div class="fw-semibold">CRL</div>
+            <div class="small text-muted">
+              {% if crl_exists %}Diperbarui {{ crl_mtime | tanggal }}{% else %}Belum tersedia{% endif %}
+            </div>
+          </div>
+          <span class="badge bg-label-{{ 'success' if crl_exists else 'danger' }}">
+            {{ 'ada' if crl_exists else 'kosong' }}
+          </span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-start gap-3">
+          <div>
+            <div class="fw-semibold">Timestamp (TSA)</div>
+            <div class="small text-muted">
+              {% if settings.tsa_enabled %}
+                {{ 'Wajib' if settings.tsa_required else 'Aktif' }}{% if settings.embed_ltv %} · PAdES B-LT{% endif %}
+              {% else %}
+                Nonaktif · dokumen B-B
+              {% endif %}
+            </div>
+          </div>
+          <span class="badge bg-label-{{ 'success' if settings.tsa_enabled else 'secondary' }}">
+            {{ 'aktif' if settings.tsa_enabled else 'nonaktif' }}
+          </span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-start gap-3">
+          <div>
+            <div class="fw-semibold">Rantai audit</div>
+            <div class="small text-muted">{{ chain_count }} event diperiksa</div>
+          </div>
+          <span class="badge bg-label-{{ 'success' if chain_ok else 'danger' }}">
+            {{ 'valid' if chain_ok else 'rusak' }}
+          </span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center gap-3">
+          <div class="fw-semibold">Multi-tanda tangan</div>
+          <span class="badge bg-label-{{ 'success' if settings.enable_multisign else 'secondary' }}">
+            {{ 'aktif' if settings.enable_multisign else 'nonaktif' }}
+          </span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center gap-3">
+          <div class="fw-semibold">Retensi</div>
+          <span class="small text-muted">{{ settings.retention_years }} tahun</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="card-title mb-0">Aktivitas audit</h5>
+        <a href="/admin/audit" class="small">Lihat semua <i class="bx bx-right-arrow-alt"></i></a>
+      </div>
+      {% if recent_events %}
+      <ul class="list-group list-group-flush">
+        {% for event in recent_events %}
+        <li class="list-group-item d-flex justify-content-between align-items-center gap-3">
+          <span class="badge bg-label-primary">{{ event.event_type }}</span>
+          <span class="small text-muted text-nowrap">{{ event.created_at | tanggal }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="empty-state">
+        <i class="bx bx-history"></i>
+        Belum ada event audit.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

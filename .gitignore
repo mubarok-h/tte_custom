@@ -9,3 +9,15 @@ secrets/
 *.p12
 *.key
 !ca/**/README.md
+
+# Arsip/paket lokal (berisi kunci CA & .env — jangan pernah di-commit)
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.log
+*.db
+*.sqlite
+*.sqlite3
+.env.*
+!.env.example

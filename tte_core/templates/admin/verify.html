@@ -1,0 +1,104 @@
+{% extends "admin/base.html" %}
+{% block title %}Periksa Dokumen{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/admin/documents">Dokumen</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Periksa</li>
+  </ol>
+</nav>
+
+<div class="mb-4">
+  <h4 class="page-title mb-1">Periksa Dokumen</h4>
+  <p class="page-subtitle">Verifikasi kriptografis memakai short ID dan token dokumen.</p>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="get" action="/admin/verify" class="row g-3 align-items-end">
+      <div class="col-12 col-md-3">
+        <label for="short_id" class="form-label">Short ID</label>
+        <input id="short_id" name="short_id" type="text" class="form-control mono" value="{{ short_id }}" placeholder="A1B2C3D4">
+      </div>
+      <div class="col-12 col-md-7">
+        <label for="t" class="form-label">Token</label>
+        <input id="t" name="t" type="text" class="form-control mono" value="{{ token }}" placeholder="Token dari tautan verifikasi">
+      </div>
+      <div class="col-12 col-md-2">
+        <button class="btn btn-primary w-100" type="submit">
+          <i class="bx bx-search me-1"></i>Periksa
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if status %}
+<div class="card">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <h5 class="card-title mb-0">Hasil</h5>
+    <span class="badge bg-label-{{ badge_class(status) }}">{{ status | replace('_', ' ') }}</span>
+  </div>
+  <div class="card-body">
+    {% if error %}
+    <div class="alert alert-danger py-2">{{ error }}</div>
+    {% endif %}
+
+    {% if document %}
+    <dl class="row doc-facts mb-0">
+      <dt class="col-sm-3">Nama berkas</dt>
+      <dd class="col-sm-9">{{ document.filename }}</dd>
+      <dt class="col-sm-3">Short ID</dt>
+      <dd class="col-sm-9 mono">{{ document.short_id }}</dd>
+      <dt class="col-sm-3">SHA-256 sumber</dt>
+      <dd class="col-sm-9 mono">{{ document.sha256 }}</dd>
+      {% if document.final_sha256 %}
+      <dt class="col-sm-3">SHA-256 final</dt>
+      <dd class="col-sm-9 mono">{{ document.final_sha256 }}</dd>
+      {% endif %}
+      <dt class="col-sm-3">Diunggah</dt>
+      <dd class="col-sm-9">{{ document.created_at[:16] | replace('T', ' ') }}</dd>
+    </dl>
+    {% endif %}
+  </div>
+
+  {% if result and result.signatures %}
+  <div class="card-body border-top">
+    <h6 class="mb-3">Tanda tangan</h6>
+    {% for sig in result.signatures %}
+    <div class="border rounded p-3 mb-3 border-start border-4 {{ 'border-success' if sig.valid else 'border-danger' }}">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+        <div>
+          <div class="fw-semibold">
+            {{ sig.signer_profile.name if sig.signer_profile else (sig.signer.get('common_name', '-') if sig.signer else '-') }}
+          </div>
+          <div class="small text-muted">
+            {% if sig.signer_profile %}
+              {{ sig.signer_profile.jabatan }}{% if sig.signer_profile.nip %} · NIP {{ sig.signer_profile.nip }}{% endif %} ·
+            {% endif %}
+            INTACT: {{ 'ya' if sig.intact else 'tidak' }} ·
+            TRUSTED: {{ 'ya' if sig.trusted else 'tidak' }} ·
+            REVOKED: {{ 'ya' if sig.revoked else 'tidak' }}
+          </div>
+        </div>
+        <span class="badge bg-label-{{ 'success' if sig.valid else 'danger' }}">
+          {{ 'VALID' if sig.valid else 'TIDAK VALID' }}
+        </span>
+      </div>
+      <dl class="row doc-facts mb-0 mt-3">
+        <dt class="col-sm-3">Field</dt>
+        <dd class="col-sm-9 mono">{{ sig.field_name }}</dd>
+        <dt class="col-sm-3">Serial</dt>
+        <dd class="col-sm-9 mono">{{ sig.serial or '-' }}</dd>
+        <dt class="col-sm-3">Waktu</dt>
+        <dd class="col-sm-9">{{ (sig.signing_time[:16] | replace('T', ' ')) if sig.signing_time else '-' }}</dd>
+        <dt class="col-sm-3">Ringkasan</dt>
+        <dd class="col-sm-9 small">{{ sig.summary }}</dd>
+      </dl>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

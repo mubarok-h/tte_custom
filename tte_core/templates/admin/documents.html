@@ -1,0 +1,123 @@
+{% extends "admin/base.html" %}
+{% block title %}Dokumen{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Dokumen</h4>
+    <p class="page-subtitle">{{ pagination.total }} dokumen tersimpan di arsip TTE.</p>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <h5 class="card-title mb-0">Unggah PDF baru</h5>
+    <small class="text-muted">
+      Maks. {{ settings.max_upload_bytes | filesize }} · {{ settings.max_pages }} halaman
+    </small>
+  </div>
+  <div class="card-body">
+    <form method="post" action="/admin/documents" enctype="multipart/form-data" class="row g-3 align-items-end">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="col-12 col-md-9">
+        <label for="file" class="form-label">Berkas PDF</label>
+        <input id="file" name="file" type="file" class="form-control" accept="application/pdf,.pdf" required>
+      </div>
+      <div class="col-12 col-md-3">
+        <button class="btn btn-primary w-100" type="submit">
+          <i class="bx bx-upload me-1"></i>Unggah
+        </button>
+      </div>
+      <div class="col-12">
+        <div class="form-note">
+          Dokumen akan diberi <code>short_id</code> dan tautan verifikasi otomatis.
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" action="/admin/documents" class="row g-3 align-items-end">
+      <div class="col-12 col-md-5">
+        <label for="q" class="form-label">Cari</label>
+        <input id="q" name="q" type="text" class="form-control" value="{{ q }}" placeholder="Nama berkas atau short ID">
+      </div>
+      <div class="col-12 col-md-3">
+        <label for="status" class="form-label">Status</label>
+        <select id="status" name="status" class="form-select">
+          <option value="">Semua status</option>
+          {% for item in statuses %}
+          <option value="{{ item }}" {{ 'selected' if status == item else '' }}>{{ item }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-4 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">
+          <i class="bx bx-filter-alt me-1"></i>Terapkan
+        </button>
+        {% if q or status %}
+        <a class="btn btn-outline-secondary" href="/admin/documents">Reset</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  {% if documents %}
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Short ID</th>
+          <th>Nama berkas</th>
+          <th>Ukuran</th>
+          <th>Status</th>
+          <th>Diunggah</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in documents %}
+        <tr>
+          <td><a class="mono doc-link" href="/admin/documents/{{ doc.id }}">{{ doc.short_id }}</a></td>
+          <td>
+            <a class="doc-link" href="/admin/documents/{{ doc.id }}">{{ doc.filename }}</a>
+            {% if doc.final_hash %}
+            <div class="small text-muted mono">{{ doc.final_hash[:16] }}…</div>
+            {% endif %}
+          </td>
+          <td class="small text-muted text-nowrap">{{ doc.size_bytes | filesize }}</td>
+          <td><span class="badge bg-label-{{ badge_class(doc.status) }}">{{ doc.status }}</span></td>
+          <td class="small text-muted text-nowrap">{{ doc.created_at | tanggal }}</td>
+          <td class="text-end table-actions text-nowrap">
+            <a class="btn btn-sm btn-outline-primary" href="/admin/documents/{{ doc.id }}">
+              Buka
+            </a>
+            <a class="btn btn-sm btn-outline-secondary" href="/admin/documents/{{ doc.id }}/file?variant={{ 'signed' if doc.signed_path else 'original' }}">
+              <i class="bx bx-download me-1"></i>Unduh
+            </a>
+            <form method="post" action="/admin/documents/{{ doc.id }}/delete" class="inline-form"
+                  onsubmit="return confirm('Hapus dokumen {{ doc.short_id }} secara permanen?')">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <button class="btn btn-sm btn-outline-danger" type="submit">
+                <i class="bx bx-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bx bx-search"></i>
+    Tidak ada dokumen yang cocok dengan filter.
+  </div>
+  {% endif %}
+
+  <div class="card-body pt-0">
+    {% include "admin/_pagination.html" %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,279 @@
+{% extends "admin/base.html" %}
+{% block title %}Master Data{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Master Data</h4>
+    <p class="page-subtitle">Lembaga, fakultas, program studi, dan data ketuanya.</p>
+  </div>
+</div>
+
+<ul class="nav nav-pills gap-2 mb-4">
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if tab == 'institutions' else '' }}" href="/admin/master?tab=institutions">
+      <i class="bx bx-buildings me-1"></i>Lembaga
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if tab == 'faculties' else '' }}" href="/admin/master?tab=faculties">
+      <i class="bx bx-building-house me-1"></i>Fakultas
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if tab == 'programs' else '' }}" href="/admin/master?tab=programs">
+      <i class="bx bx-book-open me-1"></i>Program Studi
+    </a>
+  </li>
+</ul>
+
+{% if tab == 'institutions' %}
+{% set edit = editing if edit_type == 'institution' else None %}
+<div class="row g-4">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">Daftar lembaga</h5></div>
+      {% if institutions %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>Nama Lembaga</th><th>Ketua</th><th>Alamat</th><th class="text-end">Aksi</th></tr></thead>
+          <tbody>
+            {% for inst in institutions %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ inst.name }}</div>
+                {% if inst.code %}<div class="small text-muted">{{ inst.code }}</div>{% endif %}
+              </td>
+              <td>
+                {% if inst.head_name %}
+                <div>{{ inst.head_name }}</div>
+                <div class="small text-muted">{{ inst.head_title or 'Ketua' }}</div>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="small text-muted">{{ inst.address or '—' }}</td>
+              <td class="text-end table-actions text-nowrap">
+                <a class="btn btn-sm btn-outline-primary" href="/admin/master?tab=institutions&edit_type=institution&edit_id={{ inst.id }}">Edit</a>
+                <form method="post" action="/admin/master/institution/{{ inst.id }}/delete" class="inline-form" onsubmit="return confirm('Hapus lembaga ini?')">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">Hapus</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><i class="bx bx-buildings"></i>Belum ada lembaga.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">{{ 'Edit lembaga' if edit else 'Tambah lembaga' }}</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" action="/admin/master/institution">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          {% if edit %}<input type="hidden" name="institution_id" value="{{ edit.id }}">{% endif %}
+          <div class="mb-3">
+            <label class="form-label" for="inst-name">Nama lembaga</label>
+            <input id="inst-name" name="name" class="form-control" required value="{{ edit.name if edit else '' }}" placeholder="STIT Buntet Pesantren">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="inst-code">Kode / singkatan</label>
+            <input id="inst-code" name="code" class="form-control" value="{{ edit.code or '' if edit else '' }}" placeholder="STIT-BP">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="inst-head">Nama ketua</label>
+            <input id="inst-head" name="head_name" class="form-control" value="{{ edit.head_name or '' if edit else '' }}" placeholder="Nama ketua lembaga">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="inst-title">Jabatan ketua</label>
+            <input id="inst-title" name="head_title" class="form-control" value="{{ edit.head_title or 'Ketua' if edit else 'Ketua' }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="inst-address">Alamat</label>
+            <textarea id="inst-address" name="address" class="form-control">{{ edit.address or '' if edit else '' }}</textarea>
+          </div>
+          <button class="btn btn-primary w-100" type="submit"><i class="bx bx-save me-1"></i>Simpan</button>
+          {% if edit %}<a class="btn btn-outline-secondary w-100 mt-2" href="/admin/master?tab=institutions">Batal edit</a>{% endif %}
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% elif tab == 'faculties' %}
+{% set edit = editing if edit_type == 'faculty' else None %}
+<div class="row g-4">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">Daftar fakultas</h5></div>
+      {% if faculties %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>Fakultas</th><th>Lembaga</th><th>Ketua</th><th class="text-end">Aksi</th></tr></thead>
+          <tbody>
+            {% for fac in faculties %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ fac.name }}</div>
+                {% if fac.code %}<div class="small text-muted">{{ fac.code }}</div>{% endif %}
+              </td>
+              <td class="small">{{ fac.institution.name if fac.institution else '—' }}</td>
+              <td>
+                {% if fac.head_name %}
+                <div>{{ fac.head_name }}</div>
+                <div class="small text-muted">{{ fac.head_title or 'Ketua' }}</div>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end table-actions text-nowrap">
+                <a class="btn btn-sm btn-outline-primary" href="/admin/master?tab=faculties&edit_type=faculty&edit_id={{ fac.id }}">Edit</a>
+                <form method="post" action="/admin/master/faculty/{{ fac.id }}/delete" class="inline-form" onsubmit="return confirm('Hapus fakultas ini?')">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">Hapus</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><i class="bx bx-building-house"></i>Belum ada fakultas.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">{{ 'Edit fakultas' if edit else 'Tambah fakultas' }}</h5></div>
+      <div class="card-body">
+        {% if institutions %}
+        <form method="post" action="/admin/master/faculty">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          {% if edit %}<input type="hidden" name="faculty_id" value="{{ edit.id }}">{% endif %}
+          <div class="mb-3">
+            <label class="form-label" for="fac-inst">Lembaga</label>
+            <select id="fac-inst" name="institution_id" class="form-select" required>
+              {% for inst in institutions %}
+              <option value="{{ inst.id }}" {{ 'selected' if edit and edit.institution_id == inst.id else '' }}>{{ inst.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="fac-name">Nama fakultas</label>
+            <input id="fac-name" name="name" class="form-control" required value="{{ edit.name if edit else '' }}" placeholder="Fakultas Tarbiyah">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="fac-code">Kode</label>
+            <input id="fac-code" name="code" class="form-control" value="{{ edit.code or '' if edit else '' }}" placeholder="FT">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="fac-head">Nama ketua / dekan</label>
+            <input id="fac-head" name="head_name" class="form-control" value="{{ edit.head_name or '' if edit else '' }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="fac-title">Jabatan</label>
+            <input id="fac-title" name="head_title" class="form-control" value="{{ edit.head_title or 'Ketua' if edit else 'Ketua' }}">
+          </div>
+          <button class="btn btn-primary w-100" type="submit"><i class="bx bx-save me-1"></i>Simpan</button>
+          {% if edit %}<a class="btn btn-outline-secondary w-100 mt-2" href="/admin/master?tab=faculties">Batal edit</a>{% endif %}
+        </form>
+        {% else %}
+        <div class="empty-state"><i class="bx bx-buildings"></i>Tambahkan lembaga terlebih dahulu.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% else %}
+{% set edit = editing if edit_type == 'program' else None %}
+<div class="row g-4">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">Daftar program studi</h5></div>
+      {% if programs %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>Program Studi</th><th>Fakultas</th><th>Ketua Prodi</th><th class="text-end">Aksi</th></tr></thead>
+          <tbody>
+            {% for prog in programs %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ prog.name }}</div>
+                <div class="small text-muted">{{ prog.level or '—' }}{% if prog.code %} · {{ prog.code }}{% endif %}</div>
+              </td>
+              <td class="small">{{ prog.faculty.name if prog.faculty else '—' }}</td>
+              <td>
+                {% if prog.head_name %}
+                <div>{{ prog.head_name }}</div>
+                <div class="small text-muted">{{ prog.head_title or 'Ketua Program Studi' }}</div>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end table-actions text-nowrap">
+                <a class="btn btn-sm btn-outline-primary" href="/admin/master?tab=programs&edit_type=program&edit_id={{ prog.id }}">Edit</a>
+                <form method="post" action="/admin/master/program/{{ prog.id }}/delete" class="inline-form" onsubmit="return confirm('Hapus prodi ini?')">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">Hapus</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><i class="bx bx-book-open"></i>Belum ada program studi.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">{{ 'Edit prodi' if edit else 'Tambah prodi' }}</h5></div>
+      <div class="card-body">
+        {% if faculties %}
+        <form method="post" action="/admin/master/program">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          {% if edit %}<input type="hidden" name="program_id" value="{{ edit.id }}">{% endif %}
+          <div class="mb-3">
+            <label class="form-label" for="prog-fac">Fakultas</label>
+            <select id="prog-fac" name="faculty_id" class="form-select" required>
+              {% for fac in faculties %}
+              <option value="{{ fac.id }}" {{ 'selected' if edit and edit.faculty_id == fac.id else '' }}>{{ fac.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="prog-name">Nama program studi</label>
+            <input id="prog-name" name="name" class="form-control" required value="{{ edit.name if edit else '' }}" placeholder="Manajemen Pendidikan Islam">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="prog-code">Kode</label>
+            <input id="prog-code" name="code" class="form-control" value="{{ edit.code or '' if edit else '' }}" placeholder="MPI">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="prog-level">Jenjang</label>
+            <input id="prog-level" name="level" class="form-control" value="{{ edit.level or '' if edit else '' }}" placeholder="S1">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="prog-head">Nama ketua prodi</label>
+            <input id="prog-head" name="head_name" class="form-control" value="{{ edit.head_name or '' if edit else '' }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="prog-title">Jabatan</label>
+            <input id="prog-title" name="head_title" class="form-control" value="{{ edit.head_title or 'Ketua Program Studi' if edit else 'Ketua Program Studi' }}">
+          </div>
+          <button class="btn btn-primary w-100" type="submit"><i class="bx bx-save me-1"></i>Simpan</button>
+          {% if edit %}<a class="btn btn-outline-secondary w-100 mt-2" href="/admin/master?tab=programs">Batal edit</a>{% endif %}
+        </form>
+        {% else %}
+        <div class="empty-state"><i class="bx bx-building-house"></i>Tambahkan fakultas terlebih dahulu.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,290 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ doc.short_id }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/admin/documents">Dokumen</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ doc.short_id }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div>
+    <h4 class="page-title mb-1">{{ doc.filename }}</h4>
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge bg-label-{{ badge_class(doc.status) }}">{{ doc.status }}</span>
+      <span class="mono text-muted">{{ doc.short_id }}</span>
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary" href="/admin/documents/{{ doc.id }}/file?variant=original">
+      <i class="bx bx-download me-1"></i>Unduh asli
+    </a>
+    {% if signed_exists %}
+    <a class="btn btn-primary" href="/admin/documents/{{ doc.id }}/file?variant=signed">
+      <i class="bx bx-download me-1"></i>Unduh PDF TTE
+    </a>
+    {% endif %}
+    <form method="post" action="/admin/documents/{{ doc.id }}/delete" class="inline-form"
+          onsubmit="return confirm('Hapus dokumen {{ doc.short_id }} secara permanen?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn btn-outline-danger" type="submit">
+        <i class="bx bx-trash me-1"></i>Hapus
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-8">
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Informasi dokumen</h5>
+      </div>
+      <div class="card-body">
+        <dl class="row doc-facts mb-0">
+          <dt class="col-sm-4">ID dokumen</dt>
+          <dd class="col-sm-8 mono">{{ doc.id }}</dd>
+
+          <dt class="col-sm-4">Short ID</dt>
+          <dd class="col-sm-8 mono">{{ doc.short_id }}</dd>
+
+          <dt class="col-sm-4">Ukuran</dt>
+          <dd class="col-sm-8">{{ doc.size_bytes | filesize }}</dd>
+
+          <dt class="col-sm-4">Status</dt>
+          <dd class="col-sm-8"><span class="badge bg-label-{{ badge_class(doc.status) }}">{{ doc.status }}</span></dd>
+
+          <dt class="col-sm-4">Diunggah</dt>
+          <dd class="col-sm-8">{{ doc.created_at | tanggal }}</dd>
+
+          <dt class="col-sm-4">Retensi sampai</dt>
+          <dd class="col-sm-8">{{ doc.retention_until | tanggal }}</dd>
+
+          <dt class="col-sm-4">SHA-256 sumber</dt>
+          <dd class="col-sm-8 mono">{{ doc.source_hash }}</dd>
+
+          <dt class="col-sm-4">SHA-256 final</dt>
+          <dd class="col-sm-8 mono">{{ doc.final_hash or '—' }}</dd>
+
+          {% if doc.archived_at %}
+          <dt class="col-sm-4">Diarsipkan</dt>
+          <dd class="col-sm-8">{{ doc.archived_at | tanggal }}</dd>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Tanda tangan ({{ signatures | length }})</h5>
+      </div>
+      {% if signatures %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr><th>Field</th><th>Level</th><th>Waktu</th><th>Serial sertifikat</th></tr>
+          </thead>
+          <tbody>
+            {% for sig in signatures %}
+            <tr>
+              <td class="mono">{{ sig.field_name }}</td>
+              <td><span class="badge bg-label-success">{{ sig.pades_level }}</span></td>
+              <td class="small text-muted text-nowrap">{{ sig.signed_at | tanggal }}</td>
+              <td class="mono">{{ sig.cert_serial or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <i class="bx bx-pen"></i>
+        Dokumen belum memiliki tanda tangan.
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Permintaan tanda tangan ({{ requests | length }})</h5>
+      </div>
+      {% if requests %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr><th>Penanda tangan</th><th>Alasan</th><th>Status</th><th>Dibuat</th><th class="text-end">Aksi</th></tr>
+          </thead>
+          <tbody>
+            {% for req in requests %}
+            <tr>
+              <td>
+                {{ req.signer.name if req.signer else '—' }}
+                <div class="small text-muted">{{ req.signer.jabatan if req.signer else '' }}</div>
+              </td>
+              <td class="small">{{ req.reason or '—' }}</td>
+              <td><span class="badge bg-label-{{ badge_class(req.status) }}">{{ req.status }}</span></td>
+              <td class="small text-muted text-nowrap">{{ req.created_at | tanggal }}</td>
+              <td class="text-end table-actions text-nowrap">
+                {% if req.status == 'pending' %}
+                <form method="post" action="/admin/requests/{{ req.id }}/consent" class="inline-form">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <input type="hidden" name="next" value="{{ current_path }}">
+                  <button class="btn btn-sm btn-outline-primary" type="submit">Setujui</button>
+                </form>
+                {% endif %}
+                {% if req.status == 'consented' %}
+                <form method="post" action="/admin/requests/{{ req.id }}/sign" class="inline-form">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <input type="hidden" name="next" value="{{ current_path }}">
+                  <button class="btn btn-sm btn-primary" type="submit">Tandatangani</button>
+                </form>
+                {% endif %}
+                {% if req.status == 'signed' %}
+                <span class="small text-muted">Selesai</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <i class="bx bx-task"></i>
+        Belum ada permintaan. Buat lewat panel di kanan.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Tautan verifikasi</h5>
+      </div>
+      <div class="card-body">
+        <label for="verify-link" class="form-label">Tautan publik</label>
+        <textarea id="verify-link" class="form-control mono mb-3" rows="2" readonly>{{ verify_link }}</textarea>
+        <div class="d-flex flex-wrap gap-2">
+          <button class="btn btn-sm btn-outline-primary" type="button" id="copy-link">
+            <i class="bx bx-copy me-1"></i>Salin tautan
+          </button>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ verify_link }}" target="_blank" rel="noopener">
+            <i class="bx bx-link-external me-1"></i>Buka halaman
+          </a>
+          <a class="btn btn-sm btn-outline-secondary" href="/admin/verify?short_id={{ doc.short_id }}&t={{ verify_link.split('t=')[-1] }}">
+            <i class="bx bx-check-shield me-1"></i>Periksa cepat
+          </a>
+        </div>
+        <div class="form-note mt-3">
+          Tautan ini memuat token rahasia. Bagikan hanya kepada pihak yang berhak memverifikasi.
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Buat permintaan tanda tangan</h5>
+      </div>
+      <div class="card-body">
+        {% if doc.status == 'signed' and not settings.enable_multisign %}
+        <div class="alert alert-warning py-2 small">
+          Dokumen sudah ditandatangani. Aktifkan <code>TTE_ENABLE_MULTISIGN</code> untuk tanda tangan berikutnya.
+        </div>
+        {% elif doc.status == 'signed' and settings.enable_multisign %}
+        <div class="alert alert-info py-2 small">
+          Multi-tanda tangan aktif. Dokumen sudah memiliki {{ signatures | length }} tanda tangan;
+          Anda dapat menambahkan penanda tangan berikutnya.
+        </div>
+        {% elif settings.enable_multisign %}
+        <div class="form-note mb-3">
+          Multi-tanda tangan aktif: dokumen dapat ditandatangani lebih dari satu pihak secara berurutan.
+        </div>
+        {% endif %}
+
+        {% if signers %}
+        <form method="post" action="/admin/documents/{{ doc.id }}/requests">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="next" value="{{ current_path }}">
+          <div class="mb-3">
+            <label for="signer_id" class="form-label">Penanda tangan</label>
+            <select id="signer_id" name="signer_id" class="form-select" required>
+              <option value="">— pilih —</option>
+              {% for signer in signers %}
+              <option value="{{ signer.id }}">{{ signer.name }} · {{ signer.jabatan }} ({{ signer.nip }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="reason" class="form-label">Alasan</label>
+            <input id="reason" name="reason" type="text" class="form-control" value="Pengesahan Dokumen Resmi">
+          </div>
+          <div class="mb-3">
+            <label for="location" class="form-label">Lokasi</label>
+            <input id="location" name="location" type="text" class="form-control" value="{{ settings.location }}">
+          </div>
+          <button class="btn btn-primary w-100" type="submit">
+            <i class="bx bx-plus me-1"></i>Buat permintaan
+          </button>
+        </form>
+        {% else %}
+        <div class="empty-state py-3">
+          <i class="bx bx-user-plus"></i>
+          Belum ada penanda tangan aktif.
+          <div class="mt-1"><a href="/admin/signers">Tambahkan penanda tangan</a> terlebih dahulu.</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Berkas</h5>
+      </div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>PDF asli</span>
+          <a class="small" href="/admin/documents/{{ doc.id }}/file?variant=original">unduh</a>
+        </li>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>PDF TTE</span>
+          {% if signed_exists %}
+          <a class="small" href="/admin/documents/{{ doc.id }}/file?variant=signed">unduh</a>
+          {% else %}
+          <span class="small text-muted">belum ada</span>
+          {% endif %}
+        </li>
+        <li class="list-group-item">
+          <div class="small text-muted mb-1">Jalur arsip</div>
+          <div class="mono">{{ doc.original_path }}</div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var btn = document.getElementById('copy-link');
+    var input = document.getElementById('verify-link');
+    if (!btn || !input) return;
+    btn.addEventListener('click', function () {
+      input.select();
+      var done = function () {
+        btn.innerHTML = '<i class="bx bx-check me-1"></i>Tersalin';
+        setTimeout(function () { btn.innerHTML = '<i class="bx bx-copy me-1"></i>Salin tautan'; }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(input.value).then(done).catch(function () {
+          document.execCommand('copy'); done();
+        });
+      } else {
+        document.execCommand('copy'); done();
+      }
+    });
+  })();
+</script>
+{% endblock %}

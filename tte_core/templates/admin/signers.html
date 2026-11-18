@@ -1,0 +1,225 @@
+{% extends "admin/base.html" %}
+{% block title %}Penanda Tangan{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    const modal = document.getElementById('signerEditModal');
+    if (!modal) return;
+    modal.addEventListener('show.bs.modal', function (event) {
+      const trigger = event.relatedTarget;
+      document.getElementById('signerEditForm').action = trigger.getAttribute('data-action');
+      document.getElementById('signer-edit-name').value = trigger.getAttribute('data-name') || '';
+      document.getElementById('signer-edit-jabatan').value = trigger.getAttribute('data-jabatan') || '';
+      document.getElementById('signer-edit-nip').value = trigger.getAttribute('data-nip') || '';
+      document.getElementById('signer-edit-email').value = trigger.getAttribute('data-email') || '';
+    });
+  })();
+</script>
+{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Penanda Tangan</h4>
+    <p class="page-subtitle">Profil pejabat yang dapat dimintai tanda tangan. Satu proses signing memakai satu kunci aktif.</p>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header">
+        <form method="get" action="/admin/signers" class="row g-3 align-items-end">
+          <div class="col-12 col-md-5">
+            <label for="q" class="form-label">Cari</label>
+            <input id="q" name="q" type="text" class="form-control" value="{{ q }}" placeholder="Nama, NIP, atau jabatan">
+          </div>
+          <div class="col-12 col-md-3">
+            <label for="status" class="form-label">Status</label>
+            <select id="status" name="status" class="form-select">
+              <option value="">Semua</option>
+              <option value="active" {{ 'selected' if status == 'active' else '' }}>aktif</option>
+              <option value="inactive" {{ 'selected' if status == 'inactive' else '' }}>nonaktif</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-4 d-flex gap-2">
+            <button class="btn btn-primary" type="submit">
+              <i class="bx bx-filter-alt me-1"></i>Terapkan
+            </button>
+            {% if q or status %}
+            <a class="btn btn-outline-secondary" href="/admin/signers">Reset</a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+
+      {% if signers %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr><th>Nama</th><th>NIP</th><th>Status</th><th>Sertifikat</th><th class="text-end">Aksi</th></tr>
+          </thead>
+          <tbody>
+            {% for signer in signers %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ signer.name }}</div>
+                <div class="small text-muted">{{ signer.jabatan }}</div>
+                {% if signer.email %}<div class="small text-muted">{{ signer.email }}</div>{% endif %}
+              </td>
+              <td class="mono">{{ signer.nip }}</td>
+              <td><span class="badge bg-label-{{ badge_class(signer.status) }}">{{ signer.status }}</span></td>
+              <td class="small">
+                {% if signer.p12_path %}
+                  <span class="badge bg-label-success">sertifikat aktif</span>
+                  {% if signer.cert_serial %}
+                  <div class="mono">{{ signer.cert_serial[:18] }}{% if signer.cert_serial|length > 18 %}…{% endif %}</div>
+                  {% endif %}
+                  {% if signer.cert_not_after %}
+                  <div class="text-muted">s.d. {{ signer.cert_not_after | tanggal }}</div>
+                  {% endif %}
+                {% elif signer.cert_serial %}
+                  <span class="mono">{{ signer.cert_serial[:18] }}{% if signer.cert_serial|length > 18 %}…{% endif %}</span>
+                  <div class="text-muted">sertifikat lama</div>
+                {% else %}
+                  <span class="badge bg-label-warning">belum ada sertifikat</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <div class="dropdown">
+                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Aksi
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                      <button type="button" class="dropdown-item"
+                              data-bs-toggle="modal" data-bs-target="#signerEditModal"
+                              data-action="/admin/signers/{{ signer.id }}/edit"
+                              data-name="{{ signer.name }}"
+                              data-jabatan="{{ signer.jabatan }}"
+                              data-nip="{{ signer.nip }}"
+                              data-email="{{ signer.email or '' }}">
+                        <i class="bx bx-edit me-2"></i>Edit penanda tangan
+                      </button>
+                    </li>
+                    {% if not signer.p12_path %}
+                    <li>
+                      <form method="post" action="/admin/signers/{{ signer.id }}/certificate">
+                        <input type="hidden" name="csrf" value="{{ csrf }}">
+                        <button class="dropdown-item" type="submit">
+                          <i class="bx bx-certification me-2"></i>Terbitkan sertifikat
+                        </button>
+                      </form>
+                    </li>
+                    {% endif %}
+                    <li>
+                      <form method="post" action="/admin/signers/{{ signer.id }}/status">
+                        <input type="hidden" name="csrf" value="{{ csrf }}">
+                        <button class="dropdown-item" type="submit">
+                          <i class="bx bx-power-off me-2"></i>{{ 'Nonaktifkan' if signer.status == 'active' else 'Aktifkan' }}
+                        </button>
+                      </form>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                      <form method="post" action="/admin/signers/{{ signer.id }}/delete"
+                            onsubmit="return confirm('Hapus penanda tangan ini?')">
+                        <input type="hidden" name="csrf" value="{{ csrf }}">
+                        <button class="dropdown-item text-danger" type="submit">
+                          <i class="bx bx-trash me-2"></i>Hapus penanda tangan
+                        </button>
+                      </form>
+                    </li>
+                  </ul>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <i class="bx bx-user-x"></i>
+        Belum ada penanda tangan yang cocok.
+      </div>
+      {% endif %}
+
+      <div class="card-body pt-0">
+        {% include "admin/_pagination.html" %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="card-title mb-0">Tambah penanda tangan</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" action="/admin/signers">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <div class="mb-3">
+            <label for="name" class="form-label">Nama lengkap</label>
+            <input id="name" name="name" type="text" class="form-control" required placeholder="Rektor STIT Buntet Pesantren">
+          </div>
+          <div class="mb-3">
+            <label for="jabatan" class="form-label">Jabatan</label>
+            <input id="jabatan" name="jabatan" type="text" class="form-control" required placeholder="Rektor">
+          </div>
+          <div class="mb-3">
+            <label for="nip" class="form-label">NIP</label>
+            <input id="nip" name="nip" type="text" class="form-control" required placeholder="1987654321">
+          </div>
+          <div class="mb-3">
+            <label for="email" class="form-label">Email (opsional)</label>
+            <input id="email" name="email" type="email" class="form-control" placeholder="rektor@stit-buntetpesantren.ac.id">
+          </div>
+          <button class="btn btn-primary w-100" type="submit">
+            <i class="bx bx-save me-1"></i>Simpan penanda tangan
+          </button>
+        </form>
+        <div class="form-note mt-3">
+          Sertifikat penanda tangan diterbitkan otomatis dari CA internal saat
+          disimpan. Sertifikat dan kunci akan dihapus ketika penanda tangan dihapus.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="signerEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" id="signerEditForm">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit penanda tangan</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="signer-edit-name" class="form-label">Nama lengkap</label>
+            <input id="signer-edit-name" name="name" type="text" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label for="signer-edit-jabatan" class="form-label">Jabatan</label>
+            <input id="signer-edit-jabatan" name="jabatan" type="text" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label for="signer-edit-nip" class="form-label">NIP</label>
+            <input id="signer-edit-nip" name="nip" type="text" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label for="signer-edit-email" class="form-label">Email</label>
+            <input id="signer-edit-email" name="email" type="email" class="form-control">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

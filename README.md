@@ -33,6 +33,7 @@ make dev
 Buka:
 
 - Portal: <http://localhost:8000/>
+- Panel admin: <http://localhost:8000/admin> (masuk dengan `TTE_ADMIN_TOKEN`)
 - Dokumentasi API: <http://localhost:8000/docs>
 - Sertifikat CA: <http://localhost:8000/ca>
 
@@ -108,12 +109,26 @@ curl -OJ "http://localhost:8000/api/v1/documents/<id>/download?t=<token>"
 
 ## 3. Sertifikat per pejabat
 
+Saat penanda tangan ditambahkan lewat **Panel Admin → Penanda Tangan**, aplikasi
+otomatis menerbitkan sertifikat leaf dan file P12 dari intermediate CA:
+
+- disimpan di `data/pki/signers/<signer-id>/`;
+- password P12 dienkripsi dengan `TTE_TOKEN_SECRET`;
+- subject sertifikat memakai nama, jabatan, NIP, dan email penanda tangan;
+- file sertifikat dan kunci dihapus ketika penanda tangan dihapus;
+- penanda tangan lama tanpa sertifikat dapat memakai tombol
+  **Terbitkan sertifikat** di menu Aksi.
+
+Penerbitan otomatis memerlukan akses kunci intermediate CA di server
+(`ca/dev/intermediate/private/intermediate.key` untuk dev). Bila CA privat
+disimpan offline, terbitkan P12 secara manual:
+
 ```bash
 make issue NAME="Dekan Fakultas Tarbiyah" NIP="19870001" EMAIL="dekan@stit-buntetpesantren.ac.id"
 ```
 
 Hasil di `ca/dev/leaves/`. Salin `.p12` ke `data/pki/` lalu arahkan
-`TTE_SIGNING_P12` ke file tersebut (satu signer aktif per proses).
+`TTE_SIGNING_P12` ke file tersebut sebagai fallback global.
 
 Untuk produksi dengan banyak pejabat, gunakan HSM (lihat bagian 5).
 
@@ -246,8 +261,10 @@ Jadwalkan di cron:
 
 ```
 tte_core/               # aplikasi FastAPI + modul signing/verification
-  api/                  # router signing, portal, CA
-  templates/            # halaman verifikasi
+  api/                  # signing, verification, portal, admin, letters, CA
+  templates/            # halaman verifikasi, permohonan surat, panel admin
+  static/sneat/         # aset template Sneat (MIT), disajikan lokal
+  static/brand/         # logo resmi STIT Buntet Pesantren
 ca/                     # openssl.cnf + skrip CA
   scripts/              # init-root, init-intermediate, issue-leaf, revoke, crl
   tsa-roots/            # root TSA publik (DigiCert)
@@ -274,10 +291,100 @@ modular (`TTE_ROLES=all`). Untuk memisahkan, jalankan instance dengan
 
 ---
 
-## 12. Batasan yang diketahui
+## 12. Panel admin
+
+Panel admin tersedia di `/admin` dan memakai mesin yang sama (bukan service
+terpisah). Panel sudah **multi-user**: akun admin pertama dibuat otomatis dari
+`TTE_ADMIN_USERNAME` / `TTE_ADMIN_TOKEN`, lalu password disimpan sebagai hash
+PBKDF2-SHA256. Tambah operator dan ganti password lewat menu **Pengguna**.
+
+```env
+TTE_ADMIN_USERNAME=admin
+TTE_ADMIN_TOKEN=ganti-token-admin
+TTE_ADMIN_SESSION_HOURS=12
+```
+
+Fitur:
+
+- Dashboard statistik dokumen, permohonan surat, penanda tangan, dan status sistem.
+- **Permintaan surat**: antrean Diajukan → Diverifikasi → Disetujui → Terbit TTE,
+  lengkap dengan penolakan beralasan.
+- **Master data**: lembaga, fakultas, dan program studi beserta nama/jabatan ketua.
+- **Pengguna**: tambah akun, atur role `admin` / `operator`, reset password,
+  aktif/nonaktifkan akun.
+- Unggah PDF, unduh PDF asli/TTE, dan salin tautan verifikasi.
+- Kelola profil penanda tangan (tambah, aktif/nonaktif).
+- Buat permintaan tanda tangan, catat consent, lalu tanda tangani dari UI.
+- Audit log ber-hash-chain: lihat payload dan periksa integritas rantai.
+- Pemeriksaan cepat dokumen memakai short ID + token.
+
+Keamanan panel:
+
+- Cookie sesi ditandatangani HMAC (`TTE_TOKEN_SECRET`), `HttpOnly`, `SameSite=Lax`,
+  dan `Secure` bila URL publik memakai HTTPS.
+- Semua form POST memakai token CSRF; login dibatasi 8 percobaan gagal per IP
+  dalam 10 menit.
+- Halaman admin mengirim `X-Frame-Options: DENY`, `noindex`, dan `Cache-Control: no-store`.
+- Password akun disimpan dengan PBKDF2-SHA256 + salt; sesi berisi user id dan
+  role, lalu divalidasi ulang ke database (akun nonaktif langsung ditolak).
+- Hanya role `admin` yang dapat membuka menu Pengguna dan Master Data; operator
+  dapat memproses surat, dokumen, penanda tangan, dan audit.
+- Ganti password admin awal lewat menu **Pengguna**, dan ganti
+  `TTE_TOKEN_SECRET` sebelum produksi. Panel menampilkan peringatan bila masih
+  memakai nilai default.
+
+Tampilan panel memakai **Sneat Free Bootstrap 5 Admin Template** dari
+ThemeSelection (lisensi MIT) sebagai basis komponen, lalu diadaptasi ke bahasa
+desain **SIAP! PPs UIN SGD** (kartu membulat, Plus Jakarta Sans, sidebar kartu,
+statistik berwarna) serta palet resmi
+**STIT Buntet Pesantren** (navy `#002147`, coral `#EE4A62`, teal `#1AB69D`,
+oranye `#F8941F`, ungu `#8E56FF`). Logo institusi diambil dari situs resmi dan
+disimpan lokal di `tte_core/static/brand/`. Aset tema disimpan lokal di
+`tte_core/static/sneat/` dan tidak mengambil CDN, sehingga tetap berjalan
+offline. Teks lisensi ada di `tte_core/static/sneat/LICENSE.md`.
+
+> Panel admin tidak menggantikan kontrol akses API. Untuk produksi tetap set
+> `TTE_REQUIRE_AUTH=true` dan batasi akses `/admin` di reverse proxy bila perlu.
+
+---
+
+## 13. Permohonan surat & master data
+
+Alur publik:
+
+- `/permohonan` — formulir permohonan surat akademik (identitas, data akademik,
+  jenis surat, tujuan, keperluan).
+- `/permohonan/status?q=<NIM atau nomor permohonan>` — lacak status dan riwayat.
+- `/permohonan/validasi?no=<nomor surat>` — validasi keaslian nomor surat.
+
+Alur admin:
+
+- `/admin/letters` — antrean dan filter permohonan.
+- `/admin/letters/<id>` — verifikasi, setujui + isi nomor surat, tolak, unggah
+  PDF final, lalu lanjutkan ke dokumen untuk TTE.
+- `/admin/master` — CRUD lembaga, fakultas, prodi, dan data ketuanya.
+- `/admin/users` — manajemen akun multi-user.
+
+Pada instalasi baru, master data awal dibuat otomatis: **STIT Buntet
+Pesantren**, **Fakultas Tarbiyah**, serta prodi **BKPI** dan **MPI**. Nama
+ketua/dekan/kaprodi dikosongkan dan dapat dilengkapi lewat panel admin.
+
+Status permohonan: `submitted` → `verified` → `approved` → `signed`, atau
+`rejected`. Saat PDF final diunggah, dokumen terhubung ke permohonan dan proses
+tanda tangan memakai alur TTE yang sama. Setelah dokumen ditandatangani, status
+permohonan menjadi `signed` dan nomor surat dapat divalidasi publik.
+
+> Saat ini PDF final surat diunggah oleh Tata Usaha. Generator PDF otomatis dari
+> data permohonan belum disertakan.
+
+---
+
+## 14. Batasan yang diketahui
 
 - Adobe Reader menampilkan ikon "?" sampai root CA dipasang. Ini normal
   untuk CA internal. Portal tetap menjadi sumber verifikasi.
 - Belum ada integrasi PSrE/BSrE. Engine menyimpan titik ekstensi untuk itu.
 - OCR/QR decoding tidak dilakukan; verifikasi memakai signature, bukan QR.
-- Multi-tanda tangan bersifat opsional (`TTE_ENABLE_MULTISIGN=true`).
+- Multi-tanda tangan aktif secara default (`TTE_ENABLE_MULTISIGN=true`). Setiap
+  tanda tangan menambah field `Signature1`, `Signature2`, dan seterusnya pada
+  revisi PDF. Dapat dimatikan dengan `TTE_ENABLE_MULTISIGN=false`.

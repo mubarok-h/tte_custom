@@ -8,6 +8,8 @@ from pyhanko.sign import signers
 from pyhanko_certvalidator import ValidationContext
 
 from .config import Settings
+from .models import SignerProfile
+from .security import decrypt_secret
 
 
 class PkiError(RuntimeError):
@@ -71,6 +73,35 @@ def load_signer(settings: Settings):
         "Tidak ada signer. Set TTE_SIGNING_P12 atau konfigurasi PKCS#11 "
         "(TTE_PKCS11_LIB)."
     )
+
+
+def load_signer_for_profile(signer: SignerProfile, settings: Settings):
+    """Muat kunci penanda tangan; fallback ke kunci global bila belum ada."""
+    if signer.p12_path:
+        path = Path(signer.p12_path)
+        if not path.exists():
+            raise PkiError(
+                f"File sertifikat penanda tangan tidak ditemukan: {path}"
+            )
+        password = decrypt_secret(
+            signer.p12_password_enc, settings.token_secret
+        )
+        if not password:
+            raise PkiError(
+                "Password sertifikat penanda tangan tidak dapat dibuka. "
+                "Periksa TTE_TOKEN_SECRET atau terbitkan ulang sertifikat."
+            )
+        chain = (
+            [str(settings.intermediate_ca_path)]
+            if settings.intermediate_ca_path.exists()
+            else None
+        )
+        return signers.SimpleSigner.load_pkcs12(
+            str(path),
+            passphrase=password.encode("utf-8"),
+            ca_chain_files=chain,
+        )
+    return load_signer(settings)
 
 
 def load_tsa_roots(settings: Settings) -> list[x509.Certificate]:

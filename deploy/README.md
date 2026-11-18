@@ -3,20 +3,16 @@
 ## 1. Jalankan sekarang (tanpa systemd)
 
 ```bash
-cd /opt/tte
+cd /home/mubarok/Documents/tte_custom
 make dev
 ```
 
-Buka **http://localhost:8000** atau **http://IP-SERVER:8000**.
-Jangan buka `http://localhost` jika port 80 dipakai Apache/phpMyAdmin.
+Buka **http://localhost:8000** atau **http://192.168.1.99:8000**.
+Jangan buka `http://localhost` (port 80 dipakai Apache/phpMyAdmin).
 
 ## 2. Jalankan permanen dengan systemd
 
 ```bash
-sudo useradd -r -s /usr/sbin/nologin tte
-sudo mkdir -p /opt/tte
-sudo chown -R tte:tte /opt/tte
-
 sudo cp deploy/tte.service /etc/systemd/system/tte.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now tte
@@ -31,8 +27,9 @@ journalctl -u tte -f
 
 ## 3. Akses lewat domain
 
-Tambahkan A record `verif.stit-buntetpesantren.ac.id` ke IP server
-(`IP-SERVER` untuk LAN atau IP publik), lalu pasang reverse proxy Apache:
+Saat ini `verif.stit-buntetpesantren.ac.id` **belum punya DNS record**.
+Tambahkan A record ke IP server (mis. `192.168.1.99` untuk LAN atau IP publik),
+lalu pasang reverse proxy Apache:
 
 ```bash
 sudo cp deploy/apache-verif.conf /etc/apache2/sites-available/verif.conf
@@ -51,8 +48,8 @@ sudo certbot --apache -d verif.stit-buntetpesantren.ac.id
 
 Catatan:
 
-- Jika port 80/443 sudah dipakai Apache, jangan jalankan Caddy di port yang sama.
+- Port 80/443 sudah dipakai Apache. Jangan jalankan Caddy di port yang sama.
 - Jika domain hanya untuk LAN, tambahkan di `/etc/hosts` klien:
-  `<IP-SERVER> verif.stit-buntetpesantren.ac.id`
+  `192.168.1.99 verif.stit-buntetpesantren.ac.id`
 - Untuk produksi, gunakan `TTE_VERIFY_BASE_URL=https://verif.stit-buntetpesantren.ac.id`
   agar QR mengarah ke domain yang benar.

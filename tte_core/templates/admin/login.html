@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="id" class="light-style" dir="ltr" data-theme="theme-default" data-assets-path="/static/sneat/">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Masuk Admin — {{ institution }}</title>
+  <link rel="icon" type="image/x-icon" href="/static/sneat/favicon.ico">
+  <link rel="stylesheet" href="/static/sneat/css/fonts.css">
+  <link rel="stylesheet" href="/static/sneat/css/boxicons.css">
+  <link rel="stylesheet" href="/static/sneat/css/core.css">
+  <link rel="stylesheet" href="/static/sneat/css/theme-default.css">
+  <link rel="stylesheet" href="/static/sneat/css/siap.css">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-shell">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span class="brand-logo-tile"><img src="/static/brand/stit-logo.png" alt="Logo {{ institution }}"></span>
+        <div class="brand-text">
+          {{ institution }}
+          <small>Panel Admin TTE</small>
+        </div>
+      </div>
+
+      <div class="auth-icon">
+        <i class="bx bx-shield-quarter"></i>
+      </div>
+
+      <h1>Login Admin</h1>
+      <p class="auth-sub">Masuk untuk mengelola dan menandatangani dokumen.</p>
+
+      {% if error %}
+      <div class="alert alert-danger py-2 small" role="alert">
+        <i class="bx bx-error me-1"></i>{{ error }}
+      </div>
+      {% endif %}
+
+      <form method="post" action="/admin/login">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="next" value="{{ next }}">
+        <div class="mb-3">
+          <label for="username" class="form-label">Username</label>
+          <input id="username" name="username" type="text" class="form-control" value="{{ username }}" autocomplete="username" required autofocus>
+        </div>
+        <div class="mb-4">
+          <label for="password" class="form-label">Password</label>
+          <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" required>
+        </div>
+        <button class="auth-submit" type="submit">
+          <i class="bx bx-log-in me-1"></i>Masuk Dashboard
+        </button>
+      </form>
+
+      <p class="auth-footer">
+        Masuk dengan akun pengguna yang dibuat Administrator.
+        Sesi berlaku {{ settings.admin_session_hours if settings is defined else 12 }} jam.
+        <br>
+        <a href="/" class="d-inline-block mt-2">
+          <i class="bx bx-left-arrow-alt"></i>Kembali ke portal verifikasi
+        </a>
+      </p>
+    </div>
+
+    <div class="auth-illustration">
+      <svg width="300" height="260" viewBox="0 0 300 260" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="24" y="24" width="252" height="168" rx="18" fill="#ffffff" stroke="#ffc9d0" stroke-width="3"/>
+        <rect x="24" y="24" width="252" height="38" rx="18" fill="#FFEEEE"/>
+        <circle cx="46" cy="43" r="4" fill="#EE4A62"/>
+        <circle cx="60" cy="43" r="4" fill="#F8941F"/>
+        <circle cx="74" cy="43" r="4" fill="#1AB69D"/>
+        <rect x="46" y="82" width="120" height="12" rx="6" fill="#ffc9d0"/>
+        <rect x="46" y="104" width="180" height="8" rx="4" fill="#e2e8f0"/>
+        <rect x="46" y="120" width="152" height="8" rx="4" fill="#e2e8f0"/>
+        <rect x="46" y="146" width="82" height="26" rx="8" fill="#EE4A62"/>
+        <path d="M62 159h16M70 151v16" stroke="white" stroke-width="3" stroke-linecap="round"/>
+        <rect x="206" y="88" width="52" height="52" rx="12" fill="#FFEEEE" stroke="#b7ebdf" stroke-width="2.5"/>
+        <path d="M219 114l8 8 14-16" stroke="#128C7B" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="120" y="204" width="24" height="18" fill="#ffc9d0"/>
+        <rect x="95" y="222" width="74" height="10" rx="5" fill="#b7ebdf"/>
+        <path d="M262 16l6 6-6 6M268 22h-14" stroke="#1AB69D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="caption">Mesin TTE {{ institution }}</div>
+      <p class="hint">Satu pintu untuk mengunggah, menandatangani, dan memverifikasi dokumen akademik secara elektronik.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

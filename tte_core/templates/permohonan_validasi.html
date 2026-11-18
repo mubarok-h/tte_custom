@@ -1,0 +1,165 @@
+{% extends "public/base.html" %}
+{% block title %}Validasi Surat{% endblock %}
+{% block content %}
+<div class="actions" style="margin-top:0; margin-bottom:16px">
+  <a class="back" href="/permohonan/status" style="margin-bottom:0">← Lacak permohonan</a>
+</div>
+
+<section class="card">
+  <span class="eyebrow"><i class="bx bx-badge-check"></i>Validasi keaslian</span>
+  <h1 style="font-size:clamp(1.7rem,3.2vw,2.3rem)">Validasi Surat Resmi</h1>
+  <p class="lead">
+    Masukkan nomor surat resmi yang tertera pada dokumen untuk memastikan
+    surat diterbitkan oleh Tata Usaha {{ institution }}.
+  </p>
+
+  <form method="get" action="/permohonan/validasi" class="form-grid" style="margin-top:20px; grid-template-columns:minmax(0,1fr) auto; align-items:end">
+    <div class="field">
+      <label for="no">Nomor Surat</label>
+      <input id="no" name="no" type="text" value="{{ no }}" placeholder="Contoh: B-1204/Un.05/Ps/PP.00.9/11/2026" required>
+    </div>
+    <button class="btn" type="submit" style="height:42px"><i class="bx bx-search"></i>Verifikasi</button>
+  </form>
+
+  {% if no %}
+    {% if letter %}
+      <div style="margin-top:24px">
+        {% if valid %}
+        <div class="valid-banner">
+          <i class="bx bx-check-shield"></i>
+          <div>
+            <div>Surat terverifikasi</div>
+            <div style="font-weight:500; font-size:.8rem; margin-top:2px">
+              Nomor {{ letter.letter_no }} tercatat pada sistem TTE {{ institution }}.
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="valid-banner bad">
+          <i class="bx bx-error-circle"></i>
+          <div>
+            <div>Surat belum sah / belum terbit</div>
+            <div style="font-weight:500; font-size:.8rem; margin-top:2px">
+              Status saat ini: {{ letter_status_label(letter.status) }}.
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="request-card" style="margin-top:14px">
+          <div class="request-card-head">
+            <div>
+              <h3>{{ letter.letter_type }}</h3>
+              <div class="request-meta">{{ letter.request_no }}</div>
+            </div>
+            <span class="status {{ letter.status }}">{{ letter_status_label(letter.status) }}</span>
+          </div>
+          <div class="request-facts">
+            <div><span>Nama</span><strong>{{ letter.applicant_name }}</strong></div>
+            <div><span>NIM</span><strong>{{ letter.nim }}</strong></div>
+            <div><span>Program Studi</span><strong>{{ letter.program_name or '-' }}</strong></div>
+            <div><span>Fakultas</span><strong>{{ letter.faculty_name or '-' }}</strong></div>
+            <div><span>Nomor Surat</span><strong>{{ letter.letter_no or 'belum terbit' }}</strong></div>
+            <div><span>Tanggal Terbit</span><strong>{{ letter.approved_at | tanggal }}</strong></div>
+          </div>
+          {% if letter.purpose %}
+          <div style="margin-top:12px; color:#64748b; font-size:.82rem">
+            <strong style="color:#334155">Tujuan:</strong> {{ letter.purpose }}
+          </div>
+          {% endif %}
+        </div>
+
+        {% if verify_url %}
+        <div class="actions">
+          <a class="btn" href="{{ verify_url }}" target="_blank" rel="noopener">
+            <i class="bx bx-shield-quarter"></i>Verifikasi TTE Dokumen
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="notice">
+        Nomor surat <strong>{{ no }}</strong> tidak ditemukan. Pastikan nomor
+        diketik lengkap sesuai dokumen.
+      </div>
+    {% endif %}
+  {% else %}
+    <div class="notice">
+      Belum ada verifikasi. Masukkan nomor surat lalu klik <strong>Verifikasi</strong>.
+    </div>
+  {% endif %}
+</section>
+
+<section class="card" style="margin-top:18px">
+  <span class="eyebrow"><i class="bx bx-file"></i>Validasi dokumen</span>
+  <h2 style="margin-top:14px">Periksa PDF bertanda tangan</h2>
+  <p class="lead">
+    Unggah dokumen PDF untuk memeriksa integritas dan keaslian tanda tangan
+    elektronik STIT Buntet Pesantren Cirebon.
+  </p>
+
+  <form method="post" action="/permohonan/validasi/dokumen" enctype="multipart/form-data" class="form-grid" style="margin-top:20px; grid-template-columns:minmax(0,1fr) auto; align-items:end">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field">
+      <label for="file">Berkas PDF</label>
+      <input id="file" name="file" type="file" accept="application/pdf,.pdf" required>
+    </div>
+    <button class="btn" type="submit" style="height:42px">
+      <i class="bx bx-search"></i>Periksa Dokumen
+    </button>
+  </form>
+
+  {% if doc_error %}
+  <div class="flash err" style="margin-top:18px">{{ doc_error }}</div>
+  {% endif %}
+
+  {% if doc_result %}
+  <div style="margin-top:24px">
+    <div class="request-card-head">
+      <div>
+        <h3>Hasil pemeriksaan</h3>
+        <div class="request-meta">{{ file_name or 'dokumen.pdf' }}</div>
+      </div>
+      <span class="status {{ doc_result.status | lower }}">{{ doc_result.status }}</span>
+    </div>
+
+    {% if doc_result.signatures %}
+    <div style="margin-top:14px">
+      {% for sig in doc_result.signatures %}
+      <article class="sig-card {{ 'ok' if sig.valid else 'bad' }}">
+        <div class="sig-top">
+          <div>
+            <strong>
+              {{ sig.signer_profile.name if sig.signer_profile else (sig.signer.get('common_name', 'Penanda tangan') if sig.signer else 'Penanda tangan') }}
+            </strong>
+            <div class="small muted">
+              {% if sig.signer_profile %}
+                {{ sig.signer_profile.jabatan }}{% if sig.signer_profile.nip %} · NIP {{ sig.signer_profile.nip }}{% endif %}
+              {% else %}
+                {{ sig.signer.get('organizational_unit_name', '') if sig.signer else '' }}
+              {% endif %}
+            </div>
+          </div>
+          <span class="tag {{ 'ok' if sig.valid else 'bad' }}">{{ 'VALID' if sig.valid else 'TIDAK VALID' }}</span>
+        </div>
+        <dl class="mini-facts">
+          <div><dt>Field</dt><dd class="mono">{{ sig.field_name or '-' }}</dd></div>
+          <div><dt>Serial</dt><dd class="mono">{{ sig.serial or '-' }}</dd></div>
+          <div><dt>Waktu</dt><dd>{{ (sig.signing_time[:16] | replace('T', ' ')) if sig.signing_time else '-' }}</dd></div>
+        </dl>
+        {% if sig.error %}
+        <div class="small" style="color:#C92D44; margin-top:10px">{{ sig.error }}</div>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="notice" style="margin-top:14px">
+      Dokumen tidak memiliki tanda tangan elektronik.
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}

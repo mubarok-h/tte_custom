@@ -1,0 +1,116 @@
+{% extends "public/base.html" %}
+{% block title %}Lacak Permohonan Surat{% endblock %}
+{% block content %}
+<div class="actions" style="margin-top:0; margin-bottom:16px">
+  <a class="back" href="/permohonan" style="margin-bottom:0">← Ajukan surat baru</a>
+</div>
+
+<section class="card">
+  <span class="eyebrow"><i class="bx bx-search"></i>Lacak status</span>
+  <h1 style="font-size:clamp(1.7rem,3.2vw,2.3rem)">Lacak Permohonan Surat</h1>
+  <p class="lead">Masukkan NIM atau nomor permohonan (contoh: REQ-20261118-A1B2C3).</p>
+
+  <form method="get" action="/permohonan/status" class="form-grid" style="margin-top:20px; grid-template-columns: minmax(0,1fr) auto; align-items:end">
+    <div class="field">
+      <label for="q">NIM / Nomor Permohonan</label>
+      <input id="q" name="q" type="text" value="{{ q }}" placeholder="NIM atau nomor permohonan" required>
+    </div>
+    <button class="btn" type="submit" style="height:42px"><i class="bx bx-search"></i>Lacak Sekarang</button>
+  </form>
+
+  {% if q %}
+    {% if letters %}
+      <div style="margin-top:24px">
+        {% for letter in letters %}
+        <div class="request-card">
+          <div class="request-card-head">
+            <div>
+              <h3>{{ letter.letter_type }}</h3>
+              <div class="request-meta">
+                {{ letter.applicant_name }} · NIM {{ letter.nim }} ·
+                {{ letter.request_no }}
+              </div>
+            </div>
+            <span class="status {{ letter.status }}">{{ letter_status_label(letter.status) }}</span>
+          </div>
+
+          <div class="request-facts">
+            <div><span>Program Studi</span><strong>{{ letter.program_name or '-' }}</strong></div>
+            <div><span>Fakultas</span><strong>{{ letter.faculty_name or '-' }}</strong></div>
+            <div><span>Diajukan</span><strong>{{ letter.submitted_at | tanggal }}</strong></div>
+            <div><span>Nomor Surat</span><strong>{{ letter.letter_no or 'belum terbit' }}</strong></div>
+          </div>
+
+          <div class="timeline">
+            <div class="timeline-item done">
+              <span class="timeline-dot"></span>
+              <div>
+                <div class="timeline-title">Permohonan diajukan</div>
+                <div class="timeline-meta">{{ letter.submitted_at | tanggal }}</div>
+              </div>
+            </div>
+
+            {% if letter.status == 'rejected' %}
+            <div class="timeline-item rejected">
+              <span class="timeline-dot"></span>
+              <div>
+                <div class="timeline-title">Ditolak</div>
+                <div class="timeline-meta">
+                  {{ letter.rejected_at | tanggal }} — {{ letter.rejection_reason or 'Tanpa alasan.' }}
+                </div>
+              </div>
+            </div>
+            {% else %}
+            <div class="timeline-item {{ 'done' if letter.status in ('verified', 'approved', 'signed') else ('active' if letter.status == 'submitted' else '') }}">
+              <span class="timeline-dot"></span>
+              <div>
+                <div class="timeline-title">Diverifikasi Tata Usaha</div>
+                <div class="timeline-meta">
+                  {% if letter.verified_at %}{{ letter.verified_at | tanggal }}{% if letter.verified_by %} · {{ letter.verified_by }}{% endif %}{% else %}Menunggu verifikasi{% endif %}
+                </div>
+              </div>
+            </div>
+            <div class="timeline-item {{ 'done' if letter.status in ('approved', 'signed') else ('active' if letter.status == 'verified' else '') }}">
+              <span class="timeline-dot"></span>
+              <div>
+                <div class="timeline-title">Disetujui & nomor surat terbit</div>
+                <div class="timeline-meta">
+                  {% if letter.approved_at %}{{ letter.approved_at | tanggal }}{% if letter.letter_no %} · {{ letter.letter_no }}{% endif %}{% else %}Menunggu persetujuan{% endif %}
+                </div>
+              </div>
+            </div>
+            <div class="timeline-item {{ 'done' if letter.status == 'signed' else ('active' if letter.status == 'approved' else '') }}">
+              <span class="timeline-dot"></span>
+              <div>
+                <div class="timeline-title">Surat terbit dengan TTE</div>
+                <div class="timeline-meta">
+                  {% if letter.status == 'signed' %}Dokumen sudah ditandatangani secara elektronik.{% elif letter.status == 'approved' %}Menunggu proses tanda tangan elektronik.{% else %}Belum diproses.{% endif %}
+                </div>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+
+          {% if letter.letter_no %}
+          <div class="actions" style="margin-top:16px">
+            <a class="btn secondary" href="/permohonan/validasi?no={{ letter.letter_no }}">
+              <i class="bx bx-badge-check"></i>Validasi Surat
+            </a>
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="notice">
+        Tidak ada permohonan dengan NIM atau nomor tersebut. Periksa kembali
+        data yang dimasukkan.
+      </div>
+    {% endif %}
+  {% else %}
+    <div class="notice">
+      Belum ada pelacakan. Masukkan NIM lalu klik <strong>Lacak Sekarang</strong>.
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -14,6 +15,7 @@ from ..verify_service import VerificationError, verify_document
 router = APIRouter(tags=["portal"])
 _TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES))
+templates.env.globals["current_year"] = datetime.now().year
 
 
 @router.get("/", response_class=HTMLResponse)

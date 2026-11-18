@@ -26,9 +26,11 @@ os.environ.update(
         "TTE_CRL_PATH": str(PKI_OUT / "crl" / "stit.crl"),
         "TTE_ROOT_CRL_PATH": str(PKI_OUT / "crl" / "root.crl"),
         "TTE_TSA_ROOTS_DIR": str(PKI_OUT / "tsa"),
+        "DEV_DIR": str(TEST_ROOT / "ca"),
+        "PKI_OUT": str(PKI_OUT),
         "TTE_VERIFY_BASE_URL": "http://testserver",
         "TTE_REQUIRE_AUTH": "false",
-        "TTE_ENABLE_MULTISIGN": "false",
+        "TTE_ENABLE_MULTISIGN": "true",
     }
 )
 

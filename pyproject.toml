@@ -31,7 +31,17 @@ dev = ["pytest>=8", "pytest-cov>=5"]
 include = ["tte_core*"]
 
 [tool.setuptools.package-data]
-tte_core = ["templates/*.html"]
+tte_core = [
+    "templates/*.html",
+    "templates/admin/*.html",
+    "templates/public/*.html",
+    "static/sneat/*.ico",
+    "static/sneat/*.md",
+    "static/sneat/css/*",
+    "static/sneat/js/*",
+    "static/sneat/fonts/*",
+    "static/brand/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

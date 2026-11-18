@@ -37,7 +37,7 @@ services:
     profiles: ["postgres"]
     environment:
       POSTGRES_USER: tte
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD di .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tte}
       POSTGRES_DB: tte
     volumes:
       - pgdata:/var/lib/postgresql/data

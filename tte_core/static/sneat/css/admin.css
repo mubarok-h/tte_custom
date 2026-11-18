@@ -1,0 +1,235 @@
+/* Penyesuaian kecil di atas tema Sneat untuk mesin TTE. */
+
+body {
+  font-family: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Logo TTE menggantikan logo Sneat */
+.tte-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.28);
+}
+
+.menu .app-brand {
+  padding-left: 1.35rem;
+}
+
+.menu .app-brand-text {
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: #566a7f;
+  text-transform: none;
+}
+
+.menu .app-brand-text small {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: #a1acb8;
+  letter-spacing: 0;
+}
+
+/* Tipografi & konten */
+.page-subtitle {
+  color: #697a8d;
+  font-size: 0.94rem;
+  margin-bottom: 0;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
+.badge {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.card-header .card-title {
+  font-size: 1.02rem;
+}
+
+.table > :not(caption) > * > * {
+  vertical-align: middle;
+}
+
+.table-responsive > .table {
+  min-width: 700px;
+}
+
+.table-responsive .mono,
+.table-responsive .doc-link {
+  white-space: nowrap;
+}
+
+.card-header {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.card-header a.small {
+  white-space: nowrap;
+}
+
+.table-actions .btn + .btn,
+.table-actions .inline-form + .inline-form {
+  margin-left: 0.25rem;
+}
+
+.inline-form {
+  display: inline-block;
+  margin: 0;
+}
+
+.stat-avatar .avatar-initial {
+  width: 46px;
+  height: 46px;
+  font-size: 1.35rem;
+}
+
+.stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: #566a7f;
+}
+
+.stat-label {
+  color: #a1acb8;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 0.45rem;
+}
+
+.status-dot.ok {
+  background: #71dd37;
+  box-shadow: 0 0 0 3px rgba(113, 221, 55, 0.16);
+}
+
+.status-dot.bad {
+  background: #ff3e1d;
+  box-shadow: 0 0 0 3px rgba(255, 62, 29, 0.16);
+}
+
+details summary {
+  cursor: pointer;
+  color: #696cff;
+  font-size: 0.84rem;
+}
+
+details pre {
+  background: #f5f5f9;
+  border-radius: 0.5rem;
+  padding: 0.9rem;
+  margin: 0.6rem 0 0;
+  font-size: 0.76rem;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  color: #566a7f;
+  max-width: 720px;
+}
+
+.doc-link {
+  font-weight: 500;
+}
+
+.form-note {
+  color: #a1acb8;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.empty-state {
+  padding: 2.6rem 1rem;
+  text-align: center;
+  color: #a1acb8;
+}
+
+.empty-state i {
+  display: block;
+  font-size: 2.2rem;
+  margin-bottom: 0.5rem;
+  color: #c6ccd4;
+}
+
+/* Login */
+.authentication-wrapper.authentication-basic {
+  min-height: 100vh;
+  align-items: center;
+}
+
+.authentication-wrapper .authentication-inner {
+  max-width: 430px;
+}
+
+.authentication-wrapper .card {
+  border-radius: 1rem;
+  box-shadow: 0 18px 48px rgba(67, 89, 113, 0.12);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  margin-bottom: 1.5rem;
+}
+
+.login-brand .brand-text {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #566a7f;
+  line-height: 1.2;
+}
+
+.login-brand .brand-text small {
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 400;
+  color: #a1acb8;
+}
+
+/* Detail dokumen */
+.doc-facts dt {
+  color: #a1acb8;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.doc-facts dd {
+  color: #566a7f;
+  margin-bottom: 0;
+}
+
+@media (max-width: 575.98px) {
+  .table-actions .btn {
+    padding: 0.25rem 0.45rem;
+  }
+}

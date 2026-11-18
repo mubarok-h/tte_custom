@@ -1,0 +1,89 @@
+{% extends "admin/base.html" %}
+{% block title %}Audit Log{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Audit Log</h4>
+    <p class="page-subtitle">Setiap aksi penting dicatat dengan hash-chain SHA-256. Mengubah satu entri akan memutus rantai.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/admin/audit">
+    <i class="bx bx-refresh me-1"></i>Periksa ulang rantai
+  </a>
+</div>
+
+{% if chain_ok %}
+<div class="alert alert-success d-flex align-items-center gap-2" role="alert">
+  <i class="bx bx-check-circle fs-5"></i>
+  <div>
+    Rantai audit <strong>valid</strong> — {{ chain_count }} event diperiksa, seluruh hash cocok.
+  </div>
+</div>
+{% else %}
+<div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+  <i class="bx bx-error-circle fs-5"></i>
+  <div>
+    Rantai audit <strong>tidak valid</strong> pada/atau sebelum {{ chain_count }} event.
+    Segera periksa integritas basis data dan berkas audit.
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" action="/admin/audit" class="row g-3 align-items-end">
+      <div class="col-12 col-md-5">
+        <label for="event_type" class="form-label">Jenis event</label>
+        <select id="event_type" name="event_type" class="form-select">
+          <option value="">Semua jenis event</option>
+          {% for item in event_types %}
+          <option value="{{ item }}" {{ 'selected' if event_type == item else '' }}>{{ item }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-7 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">
+          <i class="bx bx-filter-alt me-1"></i>Terapkan
+        </button>
+        {% if event_type %}
+        <a class="btn btn-outline-secondary" href="/admin/audit">Reset</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  {% if events %}
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr><th>#</th><th>Waktu</th><th>Jenis</th><th>Payload</th><th>Hash</th></tr>
+      </thead>
+      <tbody>
+        {% for event in events %}
+        <tr>
+          <td class="mono text-nowrap">{{ event.id }}</td>
+          <td class="small text-muted text-nowrap">{{ event.created_at | tanggal }}</td>
+          <td><span class="badge bg-label-primary">{{ event.event_type }}</span></td>
+          <td>
+            <details>
+              <summary>Lihat payload</summary>
+              <pre>{{ event.payload | prettyjson }}</pre>
+            </details>
+          </td>
+          <td class="mono small">{{ event.event_hash[:12] }}…</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bx bx-history"></i>
+    Belum ada event audit yang cocok.
+  </div>
+  {% endif %}
+
+  <div class="card-body pt-0">
+    {% include "admin/_pagination.html" %}
+  </div>
+</div>
+{% endblock %}

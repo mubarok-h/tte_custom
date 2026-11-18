@@ -1,0 +1,117 @@
+{% extends "admin/base.html" %}
+{% block title %}Permintaan Surat{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Permintaan Surat</h4>
+    <p class="page-subtitle">Antrean permohonan surat akademik dari mahasiswa.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/permohonan" target="_blank" rel="noopener">
+    <i class="bx bx-link-external me-1"></i>Formulir publik
+  </a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg">
+    <div class="card stat-card stat-blue h-100">
+      <div class="card-body">
+        <div><div class="stat-label">Diajukan</div><div class="stat-value">{{ counts.submitted }}</div></div>
+        <div class="stat-icon"><i class="bx bx-envelope"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg">
+    <div class="card stat-card stat-warning h-100">
+      <div class="card-body">
+        <div><div class="stat-label">Diverifikasi</div><div class="stat-value">{{ counts.verified }}</div></div>
+        <div class="stat-icon"><i class="bx bx-check-double"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg">
+    <div class="card stat-card stat-success h-100">
+      <div class="card-body">
+        <div><div class="stat-label">Disetujui</div><div class="stat-value">{{ counts.approved }}</div></div>
+        <div class="stat-icon"><i class="bx bx-badge-check"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg">
+    <div class="card stat-card stat-success h-100">
+      <div class="card-body">
+        <div><div class="stat-label">Terbit TTE</div><div class="stat-value">{{ counts.signed }}</div></div>
+        <div class="stat-icon"><i class="bx bx-pen"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg">
+    <div class="card stat-card stat-primary h-100">
+      <div class="card-body">
+        <div><div class="stat-label">Ditolak</div><div class="stat-value">{{ counts.rejected }}</div></div>
+        <div class="stat-icon"><i class="bx bx-x-circle"></i></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" action="/admin/letters" class="row g-3 align-items-end">
+      <div class="col-12 col-md-5">
+        <label for="q" class="form-label">Cari</label>
+        <input id="q" name="q" type="text" class="form-control" value="{{ q }}" placeholder="Nama, NIM, nomor permohonan, atau nomor surat">
+      </div>
+      <div class="col-12 col-md-3">
+        <label for="status" class="form-label">Status</label>
+        <select id="status" name="status" class="form-select">
+          <option value="">Semua status</option>
+          {% for item in statuses %}
+          <option value="{{ item }}" {{ 'selected' if status == item else '' }}>{{ letter_status_label(item) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-4 d-flex gap-2">
+        <button class="btn btn-primary" type="submit"><i class="bx bx-filter-alt me-1"></i>Terapkan</button>
+        {% if q or status %}<a class="btn btn-outline-secondary" href="/admin/letters">Reset</a>{% endif %}
+      </div>
+    </form>
+  </div>
+
+  {% if letters %}
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr><th>Nomor</th><th>Pemohon</th><th>Layanan</th><th>Program Studi</th><th>Status</th><th>Diajukan</th><th class="text-end">Aksi</th></tr>
+      </thead>
+      <tbody>
+        {% for letter in letters %}
+        <tr>
+          <td class="nowrap">
+            <a class="mono doc-link" href="/admin/letters/{{ letter.id }}">{{ letter.request_no }}</a>
+            {% if letter.letter_no %}<div class="small text-muted mono">{{ letter.letter_no }}</div>{% endif %}
+          </td>
+          <td>
+            <div class="fw-semibold">{{ letter.applicant_name }}</div>
+            <div class="small text-muted">NIM {{ letter.nim }}</div>
+          </td>
+          <td class="small">{{ letter.letter_type }}</td>
+          <td class="small">{{ letter.program_name or '—' }}</td>
+          <td><span class="badge bg-label-{{ badge_class(letter.status) }}">{{ letter_status_label(letter.status) }}</span></td>
+          <td class="small text-muted text-nowrap">{{ letter.submitted_at | tanggal }}</td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-primary" href="/admin/letters/{{ letter.id }}">Buka</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><i class="bx bx-envelope"></i>Tidak ada permintaan surat yang cocok.</div>
+  {% endif %}
+
+  <div class="card-body pt-0">
+    {% include "admin/_pagination.html" %}
+  </div>
+</div>
+{% endblock %}

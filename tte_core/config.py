@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from functools import lru_cache
 from pathlib import Path
 
@@ -57,11 +56,13 @@ class Settings(BaseSettings):
 
     # Kebijakan
     retention_years: int = 5
-    enable_multisign: bool = False
+    enable_multisign: bool = True
 
     # Auth sederhana
     require_auth: bool = False
     admin_token: str = "dev-admin-token"
+    admin_username: str = "admin"
+    admin_session_hours: int = 12
 
     @field_validator("signing_p12", mode="before")
     @classmethod
@@ -90,36 +91,8 @@ class Settings(BaseSettings):
         self.pki_dir.mkdir(parents=True, exist_ok=True)
 
 
-_DEFAULT_SECRETS = {
-    "dev-secret-change-me",
-    "ganti-dengan-rahasia-panjang-acak",
-}
-_DEFAULT_ADMIN_TOKENS = {"dev-admin-token", "ganti-token-admin"}
-
-
-def _warn_insecure_defaults(settings: Settings) -> None:
-    logger = logging.getLogger(__name__)
-    if settings.token_secret in _DEFAULT_SECRETS:
-        logger.warning(
-            "TTE_TOKEN_SECRET masih default. Ganti sebelum produksi."
-        )
-    if settings.admin_token in _DEFAULT_ADMIN_TOKENS:
-        logger.warning(
-            "TTE_ADMIN_TOKEN masih default. Ganti sebelum produksi."
-        )
-    if settings.signing_p12_passphrase == "changeit":
-        logger.warning(
-            "Passphrase PKCS#12 masih default 'changeit'. Ganti sebelum produksi."
-        )
-    if not settings.require_auth:
-        logger.warning(
-            "TTE_REQUIRE_AUTH=false: endpoint signing tidak memakai API key."
-        )
-
-
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     settings = Settings()
     settings.ensure_dirs()
-    _warn_insecure_defaults(settings)
     return settings
