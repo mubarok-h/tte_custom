@@ -654,10 +654,11 @@ body {
   text-align: center;
 }
 h1, h2, h3, h4 { font-size: @SIZEpt; margin: 0 0 8px; }
-.center { text-align: center; }
-.right { text-align: right; }
-.left { text-align: left; }
-.justify { text-align: justify; }
+/* Perataan harus menang atas .body p (justify) dan td tabel. */
+.center, .center p, .center div, .center td { text-align: center; }
+.right, .right p, .right div, .right td { text-align: right; }
+.left, .left p, .left div, .left td { text-align: left; }
+.justify, .justify p, .justify div, .justify td { text-align: justify; }
 .spasi-1 { line-height: 1; }
 .spasi-115 { line-height: 1.15; }
 .spasi-15 { line-height: 1.5; }

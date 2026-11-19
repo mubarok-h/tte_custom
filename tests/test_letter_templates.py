@@ -1281,8 +1281,9 @@ def test_toolbar_format_dan_kelas_tipografi(admin_client):
 
     css = style_css()
     for token in (
-        ".left { text-align: left; }",
-        ".justify { text-align: justify; }",
+        ".left, .left p, .left div, .left td { text-align: left; }",
+        ".justify, .justify p, .justify div, .justify td { text-align: justify; }",
+        ".center p",
         ".spasi-115 {",
         ".spasi-15 {",
         ".paragraf-rapat p {",
