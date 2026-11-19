@@ -356,7 +356,7 @@
             hiddenRole.name = 'role';
             document.getElementById('userEditForm').appendChild(hiddenRole);
           }
-          hiddenRole.value = 'admin';
+          hiddenRole.value = trigger.getAttribute('data-role') || 'operator';
         } else if (hiddenRole) {
           hiddenRole.remove();
         }

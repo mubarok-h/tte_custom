@@ -124,16 +124,20 @@
         </li>
         {% endif %}
 
-        {% if current_user and current_user.role == 'admin' %}
+        {% if 'users' in permissions or (current_user and current_user.role == 'admin') or 'email' in permissions or 'storage' in permissions or 'audit' in permissions or 'ca' in permissions %}
         <li class="menu-header small text-uppercase mt-3">
           <span class="menu-header-text">Sistem</span>
         </li>
+        {% endif %}
+        {% if 'users' in permissions %}
         <li class="menu-item {{ 'active' if active == 'users' else '' }}">
           <a href="/admin/users" class="menu-link">
             <i class="menu-icon tf-icons bx bx-group"></i>
             <div>Pengguna</div>
           </a>
         </li>
+        {% endif %}
+        {% if current_user and current_user.role == 'admin' %}
         <li class="menu-item {{ 'active' if active == 'permissions' else '' }}">
           <a href="/admin/permissions" class="menu-link">
             <i class="menu-icon tf-icons bx bx-shield-alt-2"></i>

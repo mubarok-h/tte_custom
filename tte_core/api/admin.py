@@ -1374,8 +1374,7 @@ def users_page(
     role: str = Query(default=""),
     page: int = Query(default=1),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    admin=Depends(require_permission("users")),
 ):
     conditions = []
     query_text = q.strip()
@@ -1388,7 +1387,10 @@ def users_page(
                 User.email.ilike(like),
             )
         )
-    if role in USER_ROLES:
+    manageable = _manageable_roles(admin)
+    if admin.role != "admin":
+        conditions.append(User.role != "admin")
+    if role in manageable:
         conditions.append(User.role == role)
 
     total = (
@@ -1424,7 +1426,7 @@ def users_page(
             users=users,
             q=query_text,
             role=role,
-            roles=USER_ROLES,
+            roles=manageable,
             pagination=pagination,
             faculties=faculties,
             programs=programs,
@@ -1445,8 +1447,7 @@ def users_create(
     program_id: str = Form(default=""),
     password: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    admin=Depends(require_permission("users")),
     _csrf: None = Depends(require_csrf),
 ):
     target = "/admin/users"
@@ -1459,8 +1460,10 @@ def users_create(
         return _redirect(target, "Username minimal 3 karakter.", "err")
     if len(password) < 8:
         return _redirect(target, "Password minimal 8 karakter.", "err")
-    if role not in USER_ROLES:
-        return _redirect(target, "Role pengguna tidak dikenal.", "err")
+    if role not in _manageable_roles(admin):
+        return _redirect(
+            target, "Anda tidak dapat membuat pengguna dengan role tersebut.", "err"
+        )
     exists = db.execute(
         select(User).where(User.username == username).limit(1)
     ).scalar_one_or_none()
@@ -1507,13 +1510,15 @@ def users_edit(
     faculty_id: str = Form(default=""),
     program_id: str = Form(default=""),
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    admin=Depends(require_permission("users")),
     _csrf: None = Depends(require_csrf),
 ):
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Pengguna tidak ditemukan.")
+    denied = _deny_admin_account(admin, user)
+    if denied is not None:
+        return denied
     name = name.strip()
     username = username.strip().lower()
     email = email.strip()
@@ -1521,11 +1526,13 @@ def users_edit(
         return _redirect("/admin/users", "Nama dan username wajib diisi.", "err")
     if len(username) < 3:
         return _redirect("/admin/users", "Username minimal 3 karakter.", "err")
-    if role not in USER_ROLES:
-        return _redirect("/admin/users", "Role pengguna tidak dikenal.", "err")
-    if user.id == admin.id and role != "admin":
+    if role not in _manageable_roles(admin):
         return _redirect(
-            "/admin/users", "Tidak dapat menurunkan role akun sendiri.", "err"
+            "/admin/users", "Anda tidak dapat memakai role tersebut.", "err"
+        )
+    if user.id == admin.id and role != admin.role:
+        return _redirect(
+            "/admin/users", "Tidak dapat mengubah role akun sendiri.", "err"
         )
     duplicate = db.execute(
         select(User)
@@ -1560,13 +1567,15 @@ def users_delete(
     request: Request,
     user_id: str,
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    admin=Depends(require_permission("users")),
     _csrf: None = Depends(require_csrf),
 ):
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Pengguna tidak ditemukan.")
+    denied = _deny_admin_account(admin, user)
+    if denied is not None:
+        return denied
     if user.id == admin.id:
         return _redirect("/admin/users", "Tidak dapat menghapus akun sendiri.", "err")
     if user.role == "admin" and user.is_active:
@@ -1599,13 +1608,15 @@ def users_toggle_status(
     request: Request,
     user_id: str,
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    admin=Depends(require_permission("users")),
     _csrf: None = Depends(require_csrf),
 ):
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Pengguna tidak ditemukan.")
+    denied = _deny_admin_account(admin, user)
+    if denied is not None:
+        return denied
     if user.id == admin.id:
         return _redirect(
             "/admin/users", "Tidak dapat menonaktifkan akun sendiri.", "err"
@@ -1627,13 +1638,15 @@ def users_reset_password(
     user_id: str,
     password: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    admin=Depends(require_permission("users")),
     _csrf: None = Depends(require_csrf),
 ):
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Pengguna tidak ditemukan.")
+    denied = _deny_admin_account(admin, user)
+    if denied is not None:
+        return denied
     if len(password) < 8:
         return _redirect("/admin/users", "Password minimal 8 karakter.", "err")
     user.password_hash = hash_password(password)
@@ -1652,18 +1665,22 @@ def users_change_role(
     faculty_id: str = Form(default=""),
     program_id: str = Form(default=""),
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    admin=Depends(require_permission("users")),
     _csrf: None = Depends(require_csrf),
 ):
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Pengguna tidak ditemukan.")
-    if role not in USER_ROLES:
-        return _redirect("/admin/users", "Role pengguna tidak dikenal.", "err")
-    if user.id == admin.id and role != "admin":
+    if role not in _manageable_roles(admin):
         return _redirect(
-            "/admin/users", "Tidak dapat menurunkan role akun sendiri.", "err"
+            "/admin/users", "Anda tidak dapat memakai role tersebut.", "err"
+        )
+    denied = _deny_admin_account(admin, user)
+    if denied is not None:
+        return denied
+    if user.id == admin.id and role != admin.role:
+        return _redirect(
+            "/admin/users", "Tidak dapat mengubah role akun sendiri.", "err"
         )
     user.role = role
     append_event(
@@ -2226,6 +2243,24 @@ async def letter_upload_document(
 # ---------------------------------------------------------------------------
 # Format surat & kop surat
 # ---------------------------------------------------------------------------
+
+
+def _manageable_roles(user) -> tuple[str, ...]:
+    """Role yang boleh dikelola pengguna ini (non-admin tanpa role admin)."""
+    if getattr(user, "role", None) == "admin":
+        return USER_ROLES
+    return tuple(role for role in USER_ROLES if role != "admin")
+
+
+def _deny_admin_account(user, target):
+    """Cegah non-admin melihat/mengubah akun administrator."""
+    if getattr(user, "role", None) != "admin" and target.role == "admin":
+        return _redirect(
+            "/admin/users",
+            "Anda tidak dapat mengelola akun administrator.",
+            "err",
+        )
+    return None
 
 
 def _resolve_unit(

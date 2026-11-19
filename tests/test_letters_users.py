@@ -218,7 +218,9 @@ def test_multi_user_and_role_restriction(admin_client):
 
     _login(admin_client, username, password)
     assert admin_client.get("/admin/letters").status_code == 200
-    assert admin_client.get("/admin/users").status_code == 403
+    denied_users = admin_client.get("/admin/users", follow_redirects=False)
+    assert denied_users.status_code == 303
+    assert "/admin?" in denied_users.headers["location"]
     denied = admin_client.get("/admin/master", follow_redirects=False)
     assert denied.status_code == 303
     assert "/admin?" in denied.headers["location"]
@@ -661,3 +663,122 @@ def test_letter_data_scoped_by_unit(admin_client):
     check("fakultas", [req_a, req_b], [req_c])
     # Operator TU melihat semua.
     check("tu", [req_a, req_b, req_c], [])
+
+
+def test_user_management_restricted_for_non_admin(admin_client):
+    _login(admin_client, get_settings().admin_username, get_settings().admin_token)
+
+    from sqlalchemy import func, select
+    from urllib.parse import urlencode
+
+    from tte_core.db import get_session_factory
+    from tte_core.models import User
+
+    db = get_session_factory()()
+    admin_row = db.execute(
+        select(User).where(User.username == get_settings().admin_username)
+    ).scalar_one()
+    admin_id = admin_row.id
+    db.close()
+
+    username = f"petugas_{uuid.uuid4().hex[:6]}"
+    password = "petugas-pass-123"
+    created = admin_client.post(
+        "/admin/users",
+        data={
+            "csrf": _csrf(),
+            "name": "Petugas Pengguna",
+            "username": username,
+            "role": "operator",
+            "password": password,
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+
+    granted = admin_client.post(
+        "/admin/permissions",
+        content=urlencode(
+            [
+                ("csrf", _csrf()),
+                ("perms_operator", "letters"),
+                ("perms_operator", "users"),
+            ]
+        ),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        follow_redirects=False,
+    )
+    assert granted.status_code == 303
+
+    admin_client.post("/admin/logout", data={"csrf": _csrf()}, follow_redirects=False)
+    _login(admin_client, username, password)
+
+    page = admin_client.get("/admin/users")
+    assert page.status_code == 200
+    # Akun administrator tidak boleh muncul sebagai baris tabel.
+    admin_cell = f">{get_settings().admin_username}</td>"
+    assert admin_cell not in page.text
+    assert 'value="admin"' not in page.text
+
+    db = get_session_factory()()
+    before = db.scalar(select(func.count()).select_from(User)) or 0
+    db.close()
+
+    # Tidak boleh membuat pengguna dengan role administrator.
+    denied_create = admin_client.post(
+        "/admin/users",
+        data={
+            "csrf": _csrf(),
+            "name": "Admin Palsu",
+            "username": f"palsu_{uuid.uuid4().hex[:6]}",
+            "role": "admin",
+            "password": "palsu-pass-123",
+        },
+        follow_redirects=True,
+    )
+    assert denied_create.status_code == 200
+    assert "tidak dapat membuat pengguna" in denied_create.text.lower()
+    db = get_session_factory()()
+    after = db.scalar(select(func.count()).select_from(User)) or 0
+    db.close()
+    assert after == before
+
+    # Tidak boleh mengubah akun administrator.
+    for action, payload in (
+        ("password", {"password": "baru-sekali-123"}),
+        ("status", {}),
+        ("delete", {}),
+    ):
+        response = admin_client.post(
+            f"/admin/users/{admin_id}/{action}",
+            data={"csrf": _csrf(), **payload},
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "akun administrator" in response.text.lower()
+
+    # Tetap boleh membuat pengguna non-admin dengan unit yang valid.
+    from tte_core.models import StudyProgram
+
+    db = get_session_factory()()
+    program_id = db.execute(select(StudyProgram).limit(1)).scalar_one().id
+    db.close()
+
+    rekan = f"rekan_{uuid.uuid4().hex[:6]}"
+    allowed = admin_client.post(
+        "/admin/users",
+        data={
+            "csrf": _csrf(),
+            "name": "Rekan Baru",
+            "username": rekan,
+            "role": "operator_prodi",
+            "program_id": program_id,
+            "password": "rekan-pass-123",
+        },
+        follow_redirects=False,
+    )
+    assert allowed.status_code == 303
+    db = get_session_factory()()
+    row = db.execute(select(User).where(User.username == rekan)).scalar_one_or_none()
+    assert row is not None and row.role == "operator_prodi"
+    db.close()

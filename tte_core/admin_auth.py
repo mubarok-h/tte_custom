@@ -34,6 +34,7 @@ FEATURES: tuple[tuple[str, str], ...] = (
     ("templates", "Format Surat & Kop"),
     ("master", "Lembaga & Prodi"),
     ("signers", "Penanda Tangan"),
+    ("users", "Pengguna"),
     ("audit", "Audit Log"),
     ("email", "Email"),
     ("storage", "Penyimpanan"),

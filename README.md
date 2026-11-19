@@ -475,7 +475,12 @@ Halaman **Sistem → Hak Akses** (khusus administrator) menampilkan matriks fitu
 - Permintaan Surat, Dokumen, Tanda Tangan
 - Format Surat & Kop
 - Lembaga & Prodi, Penanda Tangan
-- Audit Log, Email, Penyimpanan, Sertifikat CA
+- Pengguna, Audit Log, Email, Penyimpanan, Sertifikat CA
+
+Jika fitur **Pengguna** diberikan kepada role non-admin, pengguna tersebut
+hanya dapat melihat dan mengelola akun non-administrator. Akun administrator
+disembunyikan dari daftar, dan pembuatan, perubahan role, reset password,
+penonaktifan, serta penghapusan akun administrator ditolak.
 
 Centang fitur yang boleh dibuka untuk tiap role lalu simpan. Menu sidebar
 otomatis menyesuaikan; membuka URL fitur yang tidak diizinkan akan
