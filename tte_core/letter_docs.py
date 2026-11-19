@@ -81,6 +81,7 @@ KEYWORD_GROUPS: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
         (
             ("nomor_surat", "Nomor surat resmi", "B-1204/Un.05/Ps/PP.00.9/11/2026"),
             ("nomor_permohonan", "Nomor permohonan", "REQ-20261119-0001"),
+            ("hal", "Hal / perihal surat", "Surat Keterangan Aktif Kuliah"),
             ("tanggal_surat", "Tanggal surat", "19 November 2026"),
             ("kota", "Kota penerbitan", "Cirebon"),
             ("tahun", "Tahun berjalan", "2026"),
@@ -131,6 +132,20 @@ RAW_KEYWORDS = {
     "blok_ttd_3",
     "blok_ttd_4",
 }
+
+# Keyword bernilai kode/nomor: kapitalisasinya dipertahankan, tidak diubah
+# mengikuti bentuk token (mis. [Nomor_Surat] tidak boleh jadi huruf kecil).
+PLAIN_KEYWORDS = {"nomor_surat", "nomor_permohonan"}
+
+# Blok Nomor/Hal. Dulu disisipkan otomatis oleh renderer sehingga tidak bisa
+# diubah; sekarang menjadi bagian dari body_html agar label, urutan, dan
+# barisnya bisa disesuaikan admin per format surat.
+META_BLOCK_HTML = (
+    '<div class="meta"><table>\n'
+    "  <tr><td>Nomor</td><td>:</td><td>[Nomor_Surat]</td></tr>\n"
+    "  <tr><td>Hal</td><td>:</td><td>[Hal]</td></tr>\n"
+    "</table></div>"
+)
 
 _PLACEHOLDER = re.compile(r"\[([^\[\]\n]{1,60})\]")
 
@@ -194,7 +209,10 @@ def render_text(text: str, context: dict[str, str]) -> tuple[str, list[str]]:
             if token.strip() and token not in unknown:
                 unknown.append(token)
             return match.group(0)
-        return _html_value(apply_case(token, str(context.get(key, ""))))
+        value = str(context.get(key, ""))
+        if key in PLAIN_KEYWORDS:
+            return _html_value(value)
+        return _html_value(apply_case(token, value))
 
     return _PLACEHOLDER.sub(replace, text), unknown
 
@@ -337,6 +355,7 @@ def build_context(
         "judul_penelitian": letter.research_title or "",
         "nomor_surat": letter.letter_no or "",
         "nomor_permohonan": letter.request_no or "",
+        "hal": letter.letter_type or "",
         "tanggal_surat": tanggal,
         "kota": branding.location if branding else settings.location,
         "tahun": tahun,
@@ -673,20 +692,11 @@ def render_letter_html(
         letter, signer, settings, signers=signers, branding=branding
     )
     body, unknown = render_text(template.body_html or "", context)
-    meta_nomor = ""
-    if letter.letter_no:
-        meta_nomor = (
-            '<div class="meta"><table>'
-            f'<tr><td>Nomor</td><td>:</td><td>{html.escape(letter.letter_no)}</td></tr>'
-            f'<tr><td>Hal</td><td>:</td><td>{html.escape(letter.letter_type)}</td></tr>'
-            "</table></div>"
-        )
     document = (
         "<!doctype html><html lang=\"id\"><head><meta charset=\"utf-8\">"
         f"<title>{html.escape(letter.letter_type)}</title>"
         f"<style>{style_css(style)}</style></head><body>"
         f"{render_letterhead(letterhead, logo_src=logo_src)}"
-        f"{meta_nomor}"
         f'<div class="body">{body}</div>'
         "</body></html>"
     )
@@ -715,10 +725,6 @@ def render_preview_html(
         "body{background:#fff;padding:28px 34px;max-width:900px;margin:0 auto;}"
         "</style></head><body>"
         f"{render_letterhead(letterhead, logo_src=logo_src)}"
-        '<div class="meta"><table>'
-        "<tr><td>Nomor</td><td>:</td><td>B-1204/Un.05/Ps/PP.00.9/11/2026</td></tr>"
-        "<tr><td>Hal</td><td>:</td><td>Contoh Jenis Surat</td></tr>"
-        "</table></div>"
         f'<div class="body">{body}</div>'
         "</body></html>"
     )
@@ -923,7 +929,8 @@ def seed_defaults(db: Session, settings: Settings) -> None:
             LetterTemplate(
                 letter_type=letter_type,
                 name=letter_type,
-                body_html=body,
+                body_html=f"{META_BLOCK_HTML}\n{body.strip()}",
+                meta_in_body=True,
                 audience=audience,
                 is_active=True,
                 created_by="sistem",

@@ -70,6 +70,44 @@ def init_db() -> None:
     _seed_default_master()
     _seed_role_permissions()
     _seed_letter_defaults()
+    _migrate_letter_template_meta()
+
+
+def _migrate_letter_template_meta() -> None:
+    """Pindahkan blok Nomor/Hal ke badan HTML format surat (sekali per baris).
+
+    Dulu renderer menyisipkan blok Nomor/Hal otomatis sehingga tidak bisa
+    diubah dari editor. Sekarang blok itu menjadi bagian body_html; baris lama
+    yang belum punya ditambahi sekali dan ditandai meta_in_body agar tidak
+    terulang walaupun admin menghapus blok tersebut.
+    """
+    from sqlalchemy import or_, select
+
+    from .letter_docs import META_BLOCK_HTML
+    from .models import LetterTemplate
+
+    session = get_session_factory()()
+    try:
+        rows = (
+            session.execute(
+                select(LetterTemplate).where(
+                    or_(
+                        LetterTemplate.meta_in_body.is_(False),
+                        LetterTemplate.meta_in_body.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for row in rows:
+            body = (row.body_html or "").strip()
+            row.body_html = f"{META_BLOCK_HTML}\n{body}" if body else META_BLOCK_HTML
+            row.meta_in_body = True
+        if rows:
+            session.commit()
+    finally:
+        session.close()
 
 
 def _ensure_letter_columns() -> None:
@@ -194,6 +232,11 @@ def _ensure_letter_template_columns() -> None:
         statements.append(
             "ALTER TABLE letter_templates ADD COLUMN audience VARCHAR(16)"
             " DEFAULT 'mahasiswa'"
+        )
+    if "meta_in_body" not in columns:
+        statements.append(
+            "ALTER TABLE letter_templates ADD COLUMN meta_in_body BOOLEAN"
+            " DEFAULT 0"
         )
     if not statements:
         return

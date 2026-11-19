@@ -400,6 +400,22 @@ keterangan lulus, rekomendasi, keterangan lainnya) dan muncul sebagai pilihan
 di `/permohonan`. Isi surat berupa HTML yang bisa diedit dengan pratinjau
 langsung. Kop surat bersifat global dan dipakai seluruh format.
 
+Baris **Nomor** dan **Hal** juga bagian dari isi surat, bukan disisipkan
+otomatis, sehingga label, urutan, dan jumlah barisnya bisa diubah per format
+(atau dihapus bila tidak diperlukan). Panel **Kata kunci → Nomor & Hal**
+menyisipkan blok awalnya:
+
+```html
+<div class="meta"><table>
+  <tr><td>Nomor</td><td>:</td><td>[Nomor_Surat]</td></tr>
+  <tr><td>Hal</td><td>:</td><td>[Hal]</td></tr>
+</table></div>
+```
+
+Format lama dimigrasikan sekali saat aplikasi mulai: blok tersebut ditambahkan
+ke `body_html` dan ditandai `meta_in_body`, jadi tidak muncul lagi walaupun
+kemudian dihapus admin.
+
 Keyword diambil dari data permohonan dan pejabat yang dipilih saat membuat PDF:
 
 | Penulisan | Hasil |
@@ -412,11 +428,14 @@ Keyword diambil dari data permohonan dan pejabat yang dipilih saat membuat PDF:
 | `[blok_ttd_3]` | 3 kolom tanda tangan |
 | `[blok_ttd_4]` | 4 kolom tanda tangan |
 
+`nomor_surat` dan `nomor_permohonan` selalu ditulis apa adanya (tidak diubah
+kapitalisasinya) agar kode surat tidak rusak.
+
 Keyword yang tersedia: identitas pemohon (`nama`, `nim`, `tempat_lahir`,
 `tanggal_lahir`, `email`, `telepon`, `alamat`), akademik (`lembaga`, `fakultas`,
 `prodi`, `semester`, `tahun_akademik`), permohonan (`jenis_surat`, `tujuan`,
 `keperluan`, `judul_penelitian`), surat (`nomor_surat`, `nomor_permohonan`,
-`tanggal_surat`, `kota`, `tahun`), dan penanda tangan
+`hal`, `tanggal_surat`, `kota`, `tahun`), dan penanda tangan
 (`nama_penandatangan`, `jabatan_penandatangan`, `nip_penandatangan`).
 
 Tipografi surat diatur global di `/admin/letter-style`: jenis huruf (Times New

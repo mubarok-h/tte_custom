@@ -108,6 +108,9 @@
           <div class="keyword-group">
             <div class="keyword-group-title">Blok siap pakai</div>
             <div class="keyword-chips">
+              <button type="button" class="keyword-chip" data-block="meta" title="Baris Nomor dan Hal yang bisa diubah">
+                Nomor &amp; Hal
+              </button>
               <button type="button" class="keyword-chip" data-keyword="blok_ttd" data-raw="1" data-token="blok_ttd" title="Satu kolom tanda tangan">
                 1 penanda tangan
               </button>
@@ -140,6 +143,11 @@
         <div class="card-body">
           <textarea id="body_html" name="body_html" class="form-control mono" rows="18" required
                     placeholder="<p>Yang bertanda tangan di bawah ini ...</p>">{{ editing.body_html if editing else '' }}</textarea>
+          <div class="form-text mt-2">
+            Nomor dan Hal surat ditulis di sini, bukan lagi otomatis. Klik
+            <strong>Nomor &amp; Hal</strong> pada panel kata kunci untuk menyisipkan
+            barisnya, lalu ubah label atau hapus baris yang tidak diperlukan.
+          </div>
           <div id="unknown-warning" class="alert alert-warning mt-3 d-none"></div>
         </div>
       </div>
@@ -215,9 +223,17 @@
   document.querySelectorAll('.keyword-chip').forEach(function (chip) {
     chip.addEventListener('click', function () {
       const key = chip.dataset.keyword;
-      const token = chip.dataset.raw
-        ? '[' + (chip.dataset.token || 'blok_ttd') + ']'
-        : '[' + styleKeyword(key) + ']';
+      let token;
+      if (chip.dataset.block === 'meta') {
+        token = '<div class="meta"><table>\n' +
+          '  <tr><td>Nomor</td><td>:</td><td>[Nomor_Surat]</td></tr>\n' +
+          '  <tr><td>Hal</td><td>:</td><td>[Hal]</td></tr>\n' +
+          '</table></div>\n';
+      } else {
+        token = chip.dataset.raw
+          ? '[' + (chip.dataset.token || 'blok_ttd') + ']'
+          : '[' + styleKeyword(key) + ']';
+      }
       const start = body.selectionStart || 0;
       const end = body.selectionEnd || 0;
       body.value = body.value.slice(0, start) + token + body.value.slice(end);

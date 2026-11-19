@@ -235,8 +235,11 @@ def test_generate_letter_pdf_from_template(admin_client):
     _login(admin_client)
     institution_id, faculty_id, program_id = _create_master(admin_client)
 
+    from tte_core.letter_docs import META_BLOCK_HTML
+
     letter_type = f"Surat Generate {uuid.uuid4().hex[:6]}"
     body = (
+        META_BLOCK_HTML + "\n"
         "<p>Yang bertanda tangan di bawah ini menerangkan bahwa "
         "<strong>[Nama]</strong> dengan NIM [NIM] dari [Prodi] "
         "berhak mengajukan [Keperluan].</p>[blok_ttd]"
@@ -1171,3 +1174,79 @@ def test_signature_block_variants():
     assert unknown == []
     assert rendered.count("ttd-row") == 3  # 2 penanda (1 baris) + 4 penanda (2 baris)
     assert "ttd-col" in rendered
+
+
+def test_nomor_dan_hal_mengikuti_isi_format():
+    """Nomor/Hal tidak lagi disisipkan renderer; sepenuhnya dari body_html."""
+    from datetime import datetime, timezone
+
+    from tte_core.letter_docs import META_BLOCK_HTML, render_letter_html
+    from tte_core.models import LetterHead, LetterRequest, LetterTemplate
+
+    settings = get_settings()
+    letter = LetterRequest(
+        request_no="REQ-META-1",
+        applicant_name="Uji Meta",
+        nim="1",
+        email="a@b.c",
+        letter_type="Surat Uji Meta",
+        letter_no="B-77/Un.05/2026",
+        status="approved",
+        submitted_at=datetime.now(timezone.utc),
+    )
+    head = LetterHead(name="Kop Uji")
+
+    template = LetterTemplate(
+        letter_type="Surat Uji Meta",
+        name="Uji",
+        body_html="<p>Tanpa blok nomor.</p>",
+    )
+    document, unknown = render_letter_html(
+        letter=letter, template=template, letterhead=head, signer=None,
+        settings=settings,
+    )
+    assert unknown == []
+    assert "Tanpa blok nomor." in document
+    assert "B-77/Un.05/2026" not in document
+
+    template.body_html = (
+        META_BLOCK_HTML.replace("Nomor</td>", "Nomor Surat</td>") + "\n<p>Isi.</p>"
+    )
+    document, unknown = render_letter_html(
+        letter=letter, template=template, letterhead=head, signer=None,
+        settings=settings,
+    )
+    assert unknown == []
+    assert "Nomor Surat</td>" in document  # label bisa diubah admin
+    assert "B-77/Un.05/2026" in document
+    assert "Surat Uji Meta" in document  # [Hal] = jenis surat
+
+
+def test_migrasi_blok_nomor_hanya_sekali(admin_client):
+    from tte_core.db import _migrate_letter_template_meta, get_session_factory
+    from tte_core.models import LetterTemplate
+
+    db = get_session_factory()()
+    row = LetterTemplate(
+        letter_type=f"Surat Lama {uuid.uuid4().hex[:6]}",
+        name="Format lama",
+        body_html="<p>Isi format lama.</p>",
+        meta_in_body=False,
+    )
+    db.add(row)
+    db.commit()
+    template_id = row.id
+    db.close()
+
+    _migrate_letter_template_meta()
+    _migrate_letter_template_meta()  # idempoten
+
+    db = get_session_factory()()
+    row = db.get(LetterTemplate, template_id)
+    assert row.body_html.count('class="meta"') == 1
+    assert "[Nomor_Surat]" in row.body_html
+    assert "<p>Isi format lama.</p>" in row.body_html
+    assert row.meta_in_body is True
+    db.delete(row)
+    db.commit()
+    db.close()
