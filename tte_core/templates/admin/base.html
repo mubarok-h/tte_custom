@@ -69,29 +69,37 @@
             <div>Ringkasan</div>
           </a>
         </li>
+        {% if 'letters' in permissions %}
         <li class="menu-item {{ 'active' if active == 'letters' else '' }}">
           <a href="/admin/letters" class="menu-link">
             <i class="menu-icon tf-icons bx bx-envelope"></i>
             <div>Permintaan Surat</div>
           </a>
         </li>
+        {% endif %}
+        {% if 'documents' in permissions %}
         <li class="menu-item {{ 'active' if active == 'documents' else '' }}">
           <a href="/admin/documents" class="menu-link">
             <i class="menu-icon tf-icons bx bx-file"></i>
             <div>Dokumen</div>
           </a>
         </li>
+        {% endif %}
+        {% if 'requests' in permissions %}
         <li class="menu-item {{ 'active' if active == 'requests' else '' }}">
           <a href="/admin/requests" class="menu-link">
             <i class="menu-icon tf-icons bx bx-task"></i>
             <div>Tanda Tangan</div>
           </a>
         </li>
+        {% endif %}
 
+        {% if 'master' in permissions or 'signers' in permissions or 'templates' in permissions %}
         <li class="menu-header small text-uppercase mt-3">
           <span class="menu-header-text">Master Data</span>
         </li>
-        {% if current_user and current_user.role == 'admin' %}
+        {% endif %}
+        {% if 'master' in permissions %}
         <li class="menu-item {{ 'active' if active == 'master' else '' }}">
           <a href="/admin/master" class="menu-link">
             <i class="menu-icon tf-icons bx bx-buildings"></i>
@@ -99,13 +107,15 @@
           </a>
         </li>
         {% endif %}
+        {% if 'signers' in permissions %}
         <li class="menu-item {{ 'active' if active == 'signers' else '' }}">
           <a href="/admin/signers" class="menu-link">
             <i class="menu-icon tf-icons bx bx-user-check"></i>
             <div>Penanda Tangan</div>
           </a>
         </li>
-        {% if current_user and current_user.role == 'admin' %}
+        {% endif %}
+        {% if 'templates' in permissions %}
         <li class="menu-item {{ 'active' if active == 'templates' else '' }}">
           <a href="/admin/letter-templates" class="menu-link">
             <i class="menu-icon tf-icons bx bx-layout"></i>
@@ -114,22 +124,32 @@
         </li>
         {% endif %}
 
+        {% if current_user and current_user.role == 'admin' %}
         <li class="menu-header small text-uppercase mt-3">
           <span class="menu-header-text">Sistem</span>
         </li>
-        {% if current_user and current_user.role == 'admin' %}
         <li class="menu-item {{ 'active' if active == 'users' else '' }}">
           <a href="/admin/users" class="menu-link">
             <i class="menu-icon tf-icons bx bx-group"></i>
             <div>Pengguna</div>
           </a>
         </li>
+        <li class="menu-item {{ 'active' if active == 'permissions' else '' }}">
+          <a href="/admin/permissions" class="menu-link">
+            <i class="menu-icon tf-icons bx bx-shield-alt-2"></i>
+            <div>Hak Akses</div>
+          </a>
+        </li>
+        {% endif %}
+        {% if 'email' in permissions %}
         <li class="menu-item {{ 'active' if active == 'email' else '' }}">
           <a href="/admin/email" class="menu-link">
             <i class="menu-icon tf-icons bx bx-envelope-open"></i>
             <div>Email</div>
           </a>
         </li>
+        {% endif %}
+        {% if 'storage' in permissions %}
         <li class="menu-item {{ 'active' if active == 'storage' else '' }}">
           <a href="/admin/storage" class="menu-link">
             <i class="menu-icon tf-icons bx bx-cloud-upload"></i>
@@ -137,18 +157,22 @@
           </a>
         </li>
         {% endif %}
+        {% if 'audit' in permissions %}
         <li class="menu-item {{ 'active' if active == 'audit' else '' }}">
           <a href="/admin/audit" class="menu-link">
             <i class="menu-icon tf-icons bx bx-shield-quarter"></i>
             <div>Audit Log</div>
           </a>
         </li>
+        {% endif %}
+        {% if 'ca' in permissions %}
         <li class="menu-item">
           <a href="/ca" class="menu-link">
             <i class="menu-icon tf-icons bx bx-certification"></i>
             <div>Sertifikat CA</div>
           </a>
         </li>
+        {% endif %}
         <li class="menu-item">
           <a href="/" class="menu-link">
             <i class="menu-icon tf-icons bx bx-link-external"></i>

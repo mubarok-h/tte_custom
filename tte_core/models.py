@@ -172,6 +172,12 @@ class User(Base):
     name: Mapped[str] = mapped_column(Text)
     email: Mapped[str | None] = mapped_column(Text, nullable=True)
     role: Mapped[str] = mapped_column(String(24), default="operator", index=True)
+    faculty_id: Mapped[str | None] = mapped_column(
+        ForeignKey("faculties.id"), nullable=True
+    )
+    program_id: Mapped[str | None] = mapped_column(
+        ForeignKey("study_programs.id"), nullable=True
+    )
     password_hash: Mapped[str] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -179,6 +185,18 @@ class User(Base):
     )
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class RolePermission(Base):
+    """Daftar fitur yang boleh dibuka untuk sebuah role."""
+
+    __tablename__ = "role_permissions"
+
+    role: Mapped[str] = mapped_column(String(32), primary_key=True)
+    permissions: Mapped[list] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
     )
 
 

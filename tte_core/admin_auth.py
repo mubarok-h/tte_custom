@@ -21,10 +21,41 @@ from sqlalchemy.orm import Session
 
 from .config import Settings, get_settings
 from .db import get_db
-from .models import User
+from .models import RolePermission, User
 
 ADMIN_COOKIE = "tte_admin_session"
 _CSRF_CONTEXT = b"tte-admin-csrf-v1"
+
+# Fitur yang dapat diatur hak aksesnya (admin selalu punya semua).
+FEATURES: tuple[tuple[str, str], ...] = (
+    ("letters", "Permintaan Surat"),
+    ("documents", "Dokumen"),
+    ("requests", "Tanda Tangan"),
+    ("templates", "Format Surat & Kop"),
+    ("master", "Lembaga & Prodi"),
+    ("signers", "Penanda Tangan"),
+    ("audit", "Audit Log"),
+    ("email", "Email"),
+    ("storage", "Penyimpanan"),
+    ("ca", "Sertifikat CA"),
+)
+ALL_PERMISSIONS = frozenset(key for key, _ in FEATURES)
+
+ROLE_LABELS: dict[str, str] = {
+    "admin": "Administrator",
+    "operator": "Operator TU",
+    "operator_fakultas": "Operator Fakultas",
+    "operator_prodi": "Operator Prodi",
+}
+
+# Role selain admin yang dapat diatur.
+CONFIGURABLE_ROLES = tuple(r for r in ROLE_LABELS if r != "admin")
+
+DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
+    "operator": {"letters", "documents", "requests"},
+    "operator_fakultas": {"letters", "documents", "requests"},
+    "operator_prodi": {"letters", "documents"},
+}
 
 
 @dataclass(frozen=True)
@@ -33,6 +64,9 @@ class AdminIdentity:
     username: str
     name: str
     role: str
+    permissions: frozenset[str] = frozenset()
+    faculty_id: str | None = None
+    program_id: str | None = None
 
     @property
     def is_admin(self) -> bool:
@@ -40,10 +74,10 @@ class AdminIdentity:
 
     @property
     def role_label(self) -> str:
-        return {
-            "admin": "Administrator",
-            "operator": "Operator TU",
-        }.get(self.role, self.role)
+        return ROLE_LABELS.get(self.role, self.role)
+
+    def can(self, feature: str) -> bool:
+        return self.role == "admin" or feature in self.permissions
 
 
 def _b64encode(data: bytes) -> str:
@@ -139,6 +173,36 @@ def _login_redirect(request: Request) -> HTTPException:
     )
 
 
+def load_permissions(db: Session, role: str) -> frozenset[str]:
+    if role == "admin":
+        return ALL_PERMISSIONS
+    row = db.get(RolePermission, role)
+    if row is None or not row.permissions:
+        return frozenset(DEFAULT_ROLE_PERMISSIONS.get(role, set()))
+    return frozenset(row.permissions)
+
+
+def require_permission(feature: str):
+    """Dependency factory: pastikan user punya akses ke fitur tertentu."""
+
+    def dependency(
+        request: Request,
+        user: AdminIdentity = Depends(require_admin),
+    ) -> AdminIdentity:
+        if not user.can(feature):
+            label = dict(FEATURES).get(feature, feature)
+            message = quote(f"Anda tidak memiliki akses ke {label}.")
+            raise HTTPException(
+                status_code=status.HTTP_303_SEE_OTHER,
+                headers={
+                    "Location": f"/admin?msg={message}&kind=err"
+                },
+            )
+        return user
+
+    return dependency
+
+
 def require_admin(
     request: Request,
     db: Session = Depends(get_db),
@@ -159,6 +223,9 @@ def require_admin(
         username=user.username,
         name=user.name,
         role=user.role,
+        permissions=load_permissions(db, user.role),
+        faculty_id=user.faculty_id,
+        program_id=user.program_id,
     )
     request.state.user = identity
     return identity

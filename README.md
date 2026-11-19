@@ -464,6 +464,42 @@ surat disimpan sebagai teks pada permohonan.
 
 ---
 
+### Hak akses per role
+
+Role yang tersedia: **Administrator**, **Operator TU**, **Operator Fakultas**,
+dan **Operator Prodi**. Administrator selalu memiliki akses penuh.
+
+Halaman **Sistem → Hak Akses** (khusus administrator) menampilkan matriks fitur
+× role:
+
+- Permintaan Surat, Dokumen, Tanda Tangan
+- Format Surat & Kop
+- Lembaga & Prodi, Penanda Tangan
+- Audit Log, Email, Penyimpanan, Sertifikat CA
+
+Centang fitur yang boleh dibuka untuk tiap role lalu simpan. Menu sidebar
+otomatis menyesuaikan; membuka URL fitur yang tidak diizinkan akan
+dikembalikan ke Ringkasan dengan pesan error. Halaman Ringkasan selalu dapat
+dibuka, sedangkan pengelolaan **Pengguna** dan **Hak Akses** tetap khusus
+administrator.
+
+Izin disimpan pada tabel `role_permissions` dan dibaca ulang tiap permintaan,
+sehingga perubahan langsung berlaku tanpa login ulang.
+
+### Pembatasan data per unit
+
+Pengguna dengan role unit wajib diisi fakultas/prodi pada halaman Pengguna:
+
+- **Administrator & Operator TU** — melihat seluruh data.
+- **Operator Fakultas** — hanya permohonan (dan dokumen/tanda tangan terkait)
+  dari prodi di fakultasnya.
+- **Operator Prodi** — hanya data prodinya sendiri.
+
+Pembatasan berlaku pada daftar permohonan, dokumen, permintaan tanda tangan,
+hitungan di Ringkasan, serta akses detail dan aksi (verifikasi, persetujuan,
+tanda tangan, pembuatan PDF, kirim email). Role unit yang belum diisi
+fakultas/prodi tidak melihat data apa pun (fail-closed).
+
 ## 14. Batasan yang diketahui
 
 - Adobe Reader menampilkan ikon "?" sampai root CA dipasang. Ini normal

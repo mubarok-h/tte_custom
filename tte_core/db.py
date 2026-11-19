@@ -64,8 +64,10 @@ def init_db() -> None:
     _ensure_email_settings_columns()
     _ensure_document_columns()
     _ensure_letter_template_columns()
+    _ensure_user_columns()
     _seed_default_admin()
     _seed_default_master()
+    _seed_role_permissions()
     _seed_letter_defaults()
 
 
@@ -175,6 +177,27 @@ def _ensure_letter_template_columns() -> None:
         )
 
 
+def _ensure_user_columns() -> None:
+    """Tambahkan kolom unit (fakultas/prodi) pada users (DB lama)."""
+    from sqlalchemy import inspect, text
+
+    engine = get_engine()
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("users")}
+    statements = []
+    if "faculty_id" not in columns:
+        statements.append("ALTER TABLE users ADD COLUMN faculty_id TEXT")
+    if "program_id" not in columns:
+        statements.append("ALTER TABLE users ADD COLUMN program_id TEXT")
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
 def _ensure_email_settings_columns() -> None:
     """Tambahkan kolom baru pada tabel email_settings (DB lama)."""
     from sqlalchemy import inspect, text
@@ -229,6 +252,34 @@ def _ensure_signer_columns() -> None:
     with engine.begin() as conn:
         for statement in statements:
             conn.execute(text(statement))
+
+
+def _seed_role_permissions() -> None:
+    """Pastikan setiap role non-admin punya baris izin."""
+    from sqlalchemy import select
+
+    from .admin_auth import DEFAULT_ROLE_PERMISSIONS, ROLE_LABELS
+    from .models import RolePermission
+
+    session = get_session_factory()()
+    try:
+        existing = {
+            row for row in session.execute(select(RolePermission.role)).scalars()
+        }
+        for role in ROLE_LABELS:
+            if role == "admin" or role in existing:
+                continue
+            session.add(
+                RolePermission(
+                    role=role,
+                    permissions=sorted(
+                        DEFAULT_ROLE_PERMISSIONS.get(role, ["dashboard"])
+                    ),
+                )
+            )
+        session.commit()
+    finally:
+        session.close()
 
 
 def _seed_default_master() -> None:

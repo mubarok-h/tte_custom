@@ -219,10 +219,14 @@ def test_multi_user_and_role_restriction(admin_client):
     _login(admin_client, username, password)
     assert admin_client.get("/admin/letters").status_code == 200
     assert admin_client.get("/admin/users").status_code == 403
-    assert admin_client.get("/admin/master").status_code == 403
+    denied = admin_client.get("/admin/master", follow_redirects=False)
+    assert denied.status_code == 303
+    assert "/admin?" in denied.headers["location"]
     dashboard = admin_client.get("/admin")
     assert dashboard.status_code == 200
-    assert "Pengguna" not in dashboard.text.split("Portal Publik")[0]
+    menu = dashboard.text.split("Portal Publik")[0]
+    assert "Pengguna" not in menu
+    assert "Lembaga &amp; Prodi" not in menu
 
 
 def test_public_letter_pages_render(admin_client):
@@ -445,3 +449,215 @@ def test_document_delete(admin_client, sample_pdf):
 
     listing = admin_client.get("/admin/documents")
     assert short_id not in listing.text
+
+
+def test_permissions_page_and_grant(admin_client):
+    _login(admin_client, get_settings().admin_username, get_settings().admin_token)
+    page = admin_client.get("/admin/permissions")
+    assert page.status_code == 200
+    assert "Matriks izin fitur" in page.text
+    assert "Operator Fakultas" in page.text
+    assert "Operator Prodi" in page.text
+
+    from sqlalchemy import select as _select
+
+    from tte_core.db import get_session_factory as _sf
+    from tte_core.models import StudyProgram as _Program
+
+    _db = _sf()()
+    program = _db.execute(_select(_Program).limit(1)).scalar_one()
+    program_pk = program.id
+    _db.close()
+
+    username = f"akses_{uuid.uuid4().hex[:6]}"
+    password = "akses-pass-123"
+    created = admin_client.post(
+        "/admin/users",
+        data={
+            "csrf": _csrf(),
+            "name": "Operator Akses",
+            "username": username,
+            "email": "akses@example.test",
+            "role": "operator_prodi",
+            "program_id": program_pk,
+            "password": password,
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+
+    admin_client.post("/admin/logout", data={"csrf": _csrf()}, follow_redirects=False)
+    _login(admin_client, username, password)
+
+    # Role operator prodi: tanpa akses master dan tanpa halaman hak akses.
+    assert admin_client.get("/admin/permissions").status_code == 403
+    denied = admin_client.get("/admin/master", follow_redirects=False)
+    assert denied.status_code == 303
+    assert "/admin?" in denied.headers["location"]
+
+    admin_client.post("/admin/logout", data={"csrf": _csrf()}, follow_redirects=False)
+    _login(admin_client, get_settings().admin_username, get_settings().admin_token)
+
+    from urllib.parse import urlencode
+
+    granted = admin_client.post(
+        "/admin/permissions",
+        content=urlencode(
+            [
+                ("csrf", _csrf()),
+                ("perms_operator_prodi", "letters"),
+                ("perms_operator_prodi", "master"),
+            ]
+        ),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        follow_redirects=False,
+    )
+    assert granted.status_code == 303
+
+    from sqlalchemy import select
+
+    from tte_core.db import get_session_factory
+    from tte_core.models import RolePermission
+
+    db = get_session_factory()()
+    row = db.get(RolePermission, "operator_prodi")
+    assert "master" in row.permissions
+    assert "letters" in row.permissions
+    db.close()
+
+    admin_client.post("/admin/logout", data={"csrf": _csrf()}, follow_redirects=False)
+    _login(admin_client, username, password)
+
+    master = admin_client.get("/admin/master")
+    assert master.status_code == 200
+    dashboard = admin_client.get("/admin")
+    assert "Lembaga &amp; Prodi" in dashboard.text.split("Portal Publik")[0]
+    assert "Dokumen" not in dashboard.text.split("Portal Publik")[0]
+
+
+def test_letter_data_scoped_by_unit(admin_client):
+    _login(admin_client, get_settings().admin_username, get_settings().admin_token)
+    institution_id, faculty_id, program_a = _create_master(admin_client)
+
+    from sqlalchemy import select
+
+    from tte_core.db import get_session_factory
+    from tte_core.models import Faculty, LetterRequest, StudyProgram
+
+    db = get_session_factory()()
+    suffix = uuid.uuid4().hex[:6]
+    program_b_row = StudyProgram(
+        faculty_id=faculty_id,
+        name=f"Prodi B {suffix}",
+        code=f"PB-{suffix}",
+        level="S1",
+        head_title="Ketua Program Studi",
+    )
+    other_faculty = Faculty(
+        institution_id=institution_id,
+        name=f"Fakultas Lain {suffix}",
+        code=f"FL-{suffix}",
+        head_title="Dekan",
+    )
+    db.add_all([program_b_row, other_faculty])
+    db.flush()
+    program_c_row = StudyProgram(
+        faculty_id=other_faculty.id,
+        name=f"Prodi C {suffix}",
+        code=f"PC-{suffix}",
+        level="S1",
+        head_title="Ketua Program Studi",
+    )
+    db.add(program_c_row)
+    db.commit()
+    program_b = program_b_row.id
+    other_faculty_id = other_faculty.id
+    program_c = program_c_row.id
+    db.close()
+
+    def submit(program: str) -> str:
+        nim = f"NIM-{uuid.uuid4().hex[:10]}"
+        response = admin_client.post(
+            "/permohonan",
+            data={
+                "csrf": _csrf(),
+                "applicant_name": f"Pemohon {program[:4]}",
+                "nim": nim,
+                "email": f"{nim.lower()}@example.test",
+                "institution_id": institution_id,
+                "faculty_id": faculty_id if program != program_c else other_faculty_id,
+                "program_id": program,
+                "letter_type": "Surat Keterangan Aktif Kuliah",
+                "purpose": "Beasiswa",
+                "notes": "Uji pembatasan data",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303, response.text
+        return re.search(r"REQ-[A-Z0-9-]+", response.headers["location"]).group(0)
+
+    req_a = submit(program_a)
+    req_b = submit(program_b)
+    req_c = submit(program_c)
+
+    db = get_session_factory()()
+    ids = {
+        row.request_no: row.id
+        for row in db.execute(
+            select(LetterRequest).where(
+                LetterRequest.request_no.in_([req_a, req_b, req_c])
+            )
+        ).scalars()
+    }
+    db.close()
+
+    def make_user(role: str, faculty: str = "", program: str = "") -> tuple[str, str]:
+        username = f"scope_{uuid.uuid4().hex[:6]}"
+        password = "scope-pass-123"
+        created = admin_client.post(
+            "/admin/users",
+            data={
+                "csrf": _csrf(),
+                "name": f"Scope {role}",
+                "username": username,
+                "role": role,
+                "faculty_id": faculty,
+                "program_id": program,
+                "password": password,
+            },
+            follow_redirects=False,
+        )
+        assert created.status_code == 303
+        return username, password
+
+    users = {
+        "prodi": make_user("operator_prodi", program=program_a),
+        "fakultas": make_user("operator_fakultas", faculty=faculty_id),
+        "tu": make_user("operator"),
+    }
+
+    def check(role_key: str, visible: list[str], hidden: list[str]) -> None:
+        username, password = users[role_key]
+        admin_client.post("/admin/logout", data={"csrf": _csrf()}, follow_redirects=False)
+        _login(admin_client, username, password)
+        page = admin_client.get("/admin/letters")
+        assert page.status_code == 200
+        for no in visible:
+            assert no in page.text, f"{role_key} harus melihat {no}"
+        for no in hidden:
+            assert no not in page.text, f"{role_key} tidak boleh melihat {no}"
+        # Detail permohonan di luar lingkup ditolak.
+        for no in hidden:
+            denied = admin_client.get(
+                f"/admin/letters/{ids[no]}", follow_redirects=False
+            )
+            assert denied.status_code == 303
+            assert "/admin/letters?" in denied.headers["location"]
+        admin_client.post("/admin/logout", data={"csrf": _csrf()}, follow_redirects=False)
+
+    # Operator prodi hanya melihat prodinya sendiri.
+    check("prodi", [req_a], [req_b, req_c])
+    # Operator fakultas melihat semua prodi di fakultasnya.
+    check("fakultas", [req_a, req_b], [req_c])
+    # Operator TU melihat semua.
+    check("tu", [req_a, req_b, req_c], [])

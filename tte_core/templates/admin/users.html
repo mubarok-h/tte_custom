@@ -22,7 +22,7 @@
             <select id="role" name="role" class="form-select">
               <option value="">Semua</option>
               {% for item in roles %}
-              <option value="{{ item }}" {{ 'selected' if role == item else '' }}>{{ item }}</option>
+              <option value="{{ item }}" {{ 'selected' if role == item else '' }}>{{ role_labels.get(item, item) }}</option>
               {% endfor %}
             </select>
           </div>
@@ -52,8 +52,14 @@
               <td class="mono">{{ user.username }}</td>
               <td>
                 <span class="badge bg-label-{{ 'primary' if user.role == 'admin' else 'secondary' }}">
-                  {{ 'Administrator' if user.role == 'admin' else 'Operator TU' }}
+                  {{ role_labels.get(user.role, user.role) }}
                 </span>
+                {% if user.faculty_id and faculty_map.get(user.faculty_id) %}
+                <div class="small text-muted">{{ faculty_map[user.faculty_id].name }}</div>
+                {% endif %}
+                {% if user.program_id and program_map.get(user.program_id) %}
+                <div class="small text-muted">{{ program_map[user.program_id].name }}</div>
+                {% endif %}
               </td>
               <td>
                 <span class="badge bg-label-{{ 'success' if user.is_active else 'secondary' }}">
@@ -75,6 +81,8 @@
                               data-username="{{ user.username }}"
                               data-email="{{ user.email or '' }}"
                               data-role="{{ user.role }}"
+                              data-faculty="{{ user.faculty_id or '' }}"
+                              data-program="{{ user.program_id or '' }}"
                               data-self="{{ '1' if current_user and current_user.id == user.id else '0' }}">
                         <i class="bx bx-edit me-2"></i>Edit data pengguna
                       </button>
@@ -151,8 +159,27 @@
           <div class="mb-3">
             <label for="role-new" class="form-label">Role</label>
             <select id="role-new" name="role" class="form-select">
-              <option value="operator">Operator TU</option>
-              <option value="admin">Administrator</option>
+              {% for item in roles %}
+              <option value="{{ item }}">{{ role_labels.get(item, item) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3 unit-field" id="unit-faculty-new" hidden>
+            <label for="faculty-new" class="form-label">Fakultas</label>
+            <select id="faculty-new" name="faculty_id" class="form-select">
+              <option value="">— pilih fakultas —</option>
+              {% for fac in faculties %}
+              <option value="{{ fac.id }}">{{ fac.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3 unit-field" id="unit-program-new" hidden>
+            <label for="program-new" class="form-label">Program studi</label>
+            <select id="program-new" name="program_id" class="form-select">
+              <option value="">— pilih prodi —</option>
+              {% for prog in programs %}
+              <option value="{{ prog.id }}">{{ prog.name }}</option>
+              {% endfor %}
             </select>
           </div>
           <div class="mb-3">
@@ -162,8 +189,8 @@
           <button class="btn btn-primary w-100" type="submit"><i class="bx bx-user-plus me-1"></i>Simpan pengguna</button>
         </form>
         <div class="form-note mt-3">
-          Administrator dapat mengelola pengguna dan master data. Operator TU
-          dapat memproses surat, dokumen, penanda tangan, dan audit.
+          Administrator selalu memiliki akses penuh. Fitur untuk role lain
+          diatur di halaman <a href="/admin/permissions">Hak Akses</a>.
         </div>
       </div>
     </div>
@@ -195,10 +222,29 @@
           <div class="mb-3">
             <label for="edit-role" class="form-label">Role</label>
             <select id="edit-role" name="role" class="form-select">
-              <option value="operator">Operator TU</option>
-              <option value="admin">Administrator</option>
+              {% for item in roles %}
+              <option value="{{ item }}">{{ role_labels.get(item, item) }}</option>
+              {% endfor %}
             </select>
             <div class="form-note mt-1" id="edit-role-note" hidden>Role akun sendiri tidak dapat diturunkan.</div>
+          </div>
+          <div class="mb-3 unit-field" id="unit-faculty-edit" hidden>
+            <label for="edit-faculty" class="form-label">Fakultas</label>
+            <select id="edit-faculty" name="faculty_id" class="form-select">
+              <option value="">— pilih fakultas —</option>
+              {% for fac in faculties %}
+              <option value="{{ fac.id }}">{{ fac.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3 unit-field" id="unit-program-edit" hidden>
+            <label for="edit-program" class="form-label">Program studi</label>
+            <select id="edit-program" name="program_id" class="form-select">
+              <option value="">— pilih prodi —</option>
+              {% for prog in programs %}
+              <option value="{{ prog.id }}">{{ prog.name }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
         <div class="modal-footer">
@@ -246,6 +292,30 @@
       document.getElementById('new-password').value = '';
     });
 
+    function toggleUnit(roleSelect, facultyWrap, programWrap) {
+      const role = roleSelect.value;
+      facultyWrap.hidden = role !== 'operator_fakultas';
+      programWrap.hidden = role !== 'operator_prodi';
+      facultyWrap.querySelector('select').required = role === 'operator_fakultas';
+      programWrap.querySelector('select').required = role === 'operator_prodi';
+    }
+
+    const roleNew = document.getElementById('role-new');
+    if (roleNew) {
+      toggleUnit(
+        roleNew,
+        document.getElementById('unit-faculty-new'),
+        document.getElementById('unit-program-new')
+      );
+      roleNew.addEventListener('change', function () {
+        toggleUnit(
+          roleNew,
+          document.getElementById('unit-faculty-new'),
+          document.getElementById('unit-program-new')
+        );
+      });
+    }
+
     const editModal = document.getElementById('userEditModal');
     if (editModal) {
       editModal.addEventListener('show.bs.modal', function (event) {
@@ -259,6 +329,23 @@
         const isSelf = trigger.getAttribute('data-self') === '1';
         role.disabled = isSelf;
         document.getElementById('edit-role-note').hidden = !isSelf;
+
+        const facultyEdit = document.getElementById('edit-faculty');
+        const programEdit = document.getElementById('edit-program');
+        facultyEdit.value = trigger.getAttribute('data-faculty') || '';
+        programEdit.value = trigger.getAttribute('data-program') || '';
+        toggleUnit(
+          role,
+          document.getElementById('unit-faculty-edit'),
+          document.getElementById('unit-program-edit')
+        );
+        role.addEventListener('change', function () {
+          toggleUnit(
+            role,
+            document.getElementById('unit-faculty-edit'),
+            document.getElementById('unit-program-edit')
+          );
+        });
 
         let hiddenRole = document.getElementById('edit-role-hidden');
         if (isSelf) {

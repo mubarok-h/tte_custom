@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from ..admin_auth import require_admin
+from ..admin_auth import require_admin, require_permission
 from ..config import get_settings
 from ..pki import PkiError, load_cert
 
@@ -28,7 +28,9 @@ def _fingerprint(path: Path) -> str | None:
 
 
 @router.get("/ca", response_class=HTMLResponse)
-def ca_page(request: Request, _admin=Depends(require_admin)) -> HTMLResponse:
+def ca_page(
+    request: Request, _admin=Depends(require_permission("ca"))
+) -> HTMLResponse:
     settings = get_settings()
     return templates.TemplateResponse(
         request,

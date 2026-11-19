@@ -31,6 +31,11 @@ from sqlalchemy.orm import Session
 
 from ..admin_auth import (
     ADMIN_COOKIE,
+    CONFIGURABLE_ROLES,
+    FEATURES,
+    ROLE_LABELS,
+    load_permissions,
+    require_permission,
     create_session,
     csrf_token,
     is_authenticated,
@@ -77,6 +82,7 @@ from ..models import (
     LetterTemplate,
     StorageSettings,
     SignatureRecord,
+    RolePermission,
     SignerProfile,
     SignRequest,
     StudyProgram,
@@ -108,6 +114,7 @@ from ..operations import (
     upload_document as upload_document_op,
 )
 from ..security import hash_password, verify_password
+from .. import scope as scope_mod
 from ..storage import original_path
 from ..tokens import make_token
 from ..verify_service import VerificationError, verify_document
@@ -126,7 +133,7 @@ _FAILURE_WINDOW = 600.0
 
 _DOWNLOAD_VARIANTS = {"original", "signed"}
 
-USER_ROLES = ("admin", "operator")
+USER_ROLES = tuple(ROLE_LABELS)
 LETTER_STATUSES = ("submitted", "verified", "approved", "signed", "rejected")
 LETTER_TYPES = (
     "Surat Keterangan Aktif Kuliah",
@@ -233,6 +240,12 @@ def _context(request: Request, *, active: str, **extra) -> dict:
         "settings": settings,
         "admin_username": settings.admin_username,
         "current_user": getattr(request.state, "user", None),
+        "permissions": (
+            set(getattr(request.state.user, "permissions", ()))
+            if getattr(request.state, "user", None)
+            else set()
+        ),
+        "role_labels": ROLE_LABELS,
     }
     context.update(extra)
     return context
@@ -249,6 +262,28 @@ def _redirect(
         separator = "&" if "?" in url else "?"
         url = f"{url}{separator}{urlencode({'msg': msg, 'kind': kind})}"
     return RedirectResponse(url=url + fragment, status_code=303)
+
+
+def _deny_letter(request: Request, letter: LetterRequest):
+    user = getattr(request.state, "user", None)
+    if user is not None and not scope_mod.can_access_letter(user, letter):
+        return _redirect(
+            "/admin/letters",
+            "Anda tidak memiliki akses ke permohonan ini.",
+            "err",
+        )
+    return None
+
+
+def _deny_document(request: Request, db: Session, doc: Document):
+    user = getattr(request.state, "user", None)
+    if user is not None and not scope_mod.can_access_document(db, user, doc):
+        return _redirect(
+            "/admin/documents",
+            "Anda tidak memiliki akses ke dokumen ini.",
+            "err",
+        )
+    return None
 
 
 def _doc_anchor(url: str) -> str:
@@ -449,11 +484,24 @@ def dashboard(
     )
     audit_total = db.scalar(select(func.count()).select_from(AuditEvent)) or 0
 
+    dash_user = getattr(request.state, "user", None)
+    dash_letter_scope = scope_mod.letter_condition(dash_user)
+    dash_doc_scope = scope_mod.document_condition(dash_user)
+    dash_req_scope = scope_mod.request_condition(dash_user, SignRequest)
+
+    def _scoped(condition, *extra):
+        return [item for item in (condition, *extra) if item is not None]
+
     letter_pending = (
         db.scalar(
             select(func.count())
             .select_from(LetterRequest)
-            .where(LetterRequest.status.in_(("submitted", "verified")))
+            .where(
+                *_scoped(
+                    dash_letter_scope,
+                    LetterRequest.status.in_(("submitted", "verified")),
+                )
+            )
         )
         or 0
     )
@@ -461,13 +509,19 @@ def dashboard(
         db.scalar(
             select(func.count())
             .select_from(LetterRequest)
-            .where(LetterRequest.status.in_(("approved", "signed")))
+            .where(
+                *_scoped(
+                    dash_letter_scope,
+                    LetterRequest.status.in_(("approved", "signed")),
+                )
+            )
         )
         or 0
     )
     recent_letters = (
         db.execute(
             select(LetterRequest)
+            .where(*_scoped(dash_letter_scope))
             .order_by(LetterRequest.submitted_at.desc())
             .limit(6)
         )
@@ -478,14 +532,20 @@ def dashboard(
     chain_ok, chain_count = verify_chain(db)
     recent_documents = (
         db.execute(
-            select(Document).order_by(Document.created_at.desc()).limit(8)
+            select(Document)
+            .where(*_scoped(dash_doc_scope))
+            .order_by(Document.created_at.desc())
+            .limit(8)
         )
         .scalars()
         .all()
     )
     recent_requests = (
         db.execute(
-            select(SignRequest).order_by(SignRequest.created_at.desc()).limit(8)
+            select(SignRequest)
+            .where(*_scoped(dash_req_scope))
+            .order_by(SignRequest.created_at.desc())
+            .limit(8)
         )
         .scalars()
         .all()
@@ -551,7 +611,7 @@ def documents_page(
     status: str = Query(default=""),
     page: int = Query(default=1),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("documents")),
 ):
     conditions = []
     query_text = q.strip()
@@ -562,6 +622,11 @@ def documents_page(
         )
     if status in DOC_STATUSES:
         conditions.append(Document.status == status)
+    doc_scope = scope_mod.document_condition(
+        getattr(request.state, "user", None)
+    )
+    if doc_scope is not None:
+        conditions.append(doc_scope)
 
     total = (
         db.scalar(
@@ -602,7 +667,7 @@ async def documents_upload(
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("documents")),
     _csrf: None = Depends(require_csrf),
 ):
     data = await file.read()
@@ -626,9 +691,12 @@ def document_detail(
     document_id: str,
     signer: str = Query(default=""),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("documents")),
 ):
     doc = db.get(Document, document_id)
+    _denied = _deny_document(request, db, doc)
+    if _denied is not None:
+        return _denied
     if doc is None:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
     signers = (
@@ -685,11 +753,14 @@ def document_delete(
     document_id: str,
     next: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("documents")),
     _csrf: None = Depends(require_csrf),
 ):
     target = _safe_next(next, "/admin/documents")
     doc = db.get(Document, document_id)
+    _denied = _deny_document(request, db, doc)
+    if _denied is not None:
+        return _denied
     if doc is None:
         return _redirect(target, "Dokumen tidak ditemukan.", "err")
 
@@ -740,12 +811,16 @@ def document_delete(
 
 @router.get("/documents/{document_id}/file")
 def document_file(
+    request: Request,
     document_id: str,
     variant: str = Query(default="signed"),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("documents")),
 ):
     doc = db.get(Document, document_id)
+    _denied = _deny_document(request, db, doc)
+    if _denied is not None:
+        return _denied
     if doc is None:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
     if variant not in _DOWNLOAD_VARIANTS:
@@ -777,10 +852,16 @@ def document_create_request(
     location: str = Form(default=""),
     next: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("documents")),
     _csrf: None = Depends(require_csrf),
 ):
     target = _doc_anchor(_safe_next(next, f"/admin/documents/{document_id}"))
+    doc = db.get(Document, document_id)
+    if doc is None:
+        return _redirect(target, "Dokumen tidak ditemukan.", "err")
+    _denied = _deny_document(request, db, doc)
+    if _denied is not None:
+        return _denied
     if not signer_id:
         return _redirect(target, "Pilih penanda tangan terlebih dahulu.", "err")
 
@@ -822,7 +903,7 @@ def signers_page(
     status: str = Query(default=""),
     page: int = Query(default=1),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("signers")),
 ):
     conditions = []
     query_text = q.strip()
@@ -878,7 +959,7 @@ def signers_create(
     nip: str = Form(default=""),
     email: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("signers")),
     _csrf: None = Depends(require_csrf),
 ):
     target = "/admin/signers"
@@ -948,7 +1029,7 @@ def signers_edit(
     nip: str = Form(default=""),
     email: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("signers")),
     _csrf: None = Depends(require_csrf),
 ):
     signer = db.get(SignerProfile, signer_id)
@@ -987,7 +1068,7 @@ def signers_issue_certificate(
     request: Request,
     signer_id: str,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("signers")),
     _csrf: None = Depends(require_csrf),
 ):
     signer = db.get(SignerProfile, signer_id)
@@ -1017,7 +1098,7 @@ def signers_delete(
     request: Request,
     signer_id: str,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("signers")),
     _csrf: None = Depends(require_csrf),
 ):
     signer = db.get(SignerProfile, signer_id)
@@ -1056,7 +1137,7 @@ def signers_toggle_status(
     request: Request,
     signer_id: str,
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("signers")),
     _csrf: None = Depends(require_csrf),
 ):
     signer = db.get(SignerProfile, signer_id)
@@ -1079,11 +1160,16 @@ def requests_page(
     status: str = Query(default=""),
     page: int = Query(default=1),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("requests")),
 ):
     conditions = []
     if status in REQUEST_STATUSES:
         conditions.append(SignRequest.status == status)
+    req_scope = scope_mod.request_condition(
+        getattr(request.state, "user", None), SignRequest
+    )
+    if req_scope is not None:
+        conditions.append(req_scope)
 
     total = (
         db.scalar(
@@ -1123,10 +1209,17 @@ def requests_consent(
     request_id: str,
     next: str = Form(default="/admin/requests"),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("requests")),
     _csrf: None = Depends(require_csrf),
 ):
     target = _doc_anchor(_safe_next(next, "/admin/requests"))
+    sign_req = db.get(SignRequest, request_id)
+    if sign_req is not None:
+        _doc = db.get(Document, sign_req.document_id)
+        if _doc is not None:
+            _denied = _deny_document(request, db, _doc)
+            if _denied is not None:
+                return _denied
     try:
         grant_consent_op(
             db,
@@ -1145,10 +1238,17 @@ def requests_sign(
     request_id: str,
     next: str = Form(default="/admin/requests"),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("requests")),
     _csrf: None = Depends(require_csrf),
 ):
     target = _safe_next(next, "/admin/requests")
+    sign_req = db.get(SignRequest, request_id)
+    if sign_req is not None:
+        _doc = db.get(Document, sign_req.document_id)
+        if _doc is not None:
+            _denied = _deny_document(request, db, _doc)
+            if _denied is not None:
+                return _denied
     try:
         result = sign_request_op(db, request_id=request_id)
     except OperationError as exc:
@@ -1173,7 +1273,7 @@ def audit_page(
     event_type: str = Query(default=""),
     page: int = Query(default=1),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("audit")),
 ):
     conditions = []
     if event_type:
@@ -1229,7 +1329,7 @@ def verify_uploaded_page(
     short_id: str = Query(default=""),
     t: str = Query(default=""),
     db: Session = Depends(get_db),
-    _admin: str = Depends(require_admin),
+    _admin: str = Depends(require_permission("documents")),
 ):
     """Pemeriksaan cepat dari panel admin memakai short_id + token."""
     result = None
@@ -1307,6 +1407,14 @@ def users_page(
         .scalars()
         .all()
     )
+    faculties = (
+        db.execute(select(Faculty).order_by(Faculty.name.asc())).scalars().all()
+    )
+    programs = (
+        db.execute(select(StudyProgram).order_by(StudyProgram.name.asc()))
+        .scalars()
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "admin/users.html",
@@ -1318,6 +1426,10 @@ def users_page(
             role=role,
             roles=USER_ROLES,
             pagination=pagination,
+            faculties=faculties,
+            programs=programs,
+            faculty_map={row.id: row for row in faculties},
+            program_map={row.id: row for row in programs},
         ),
     )
 
@@ -1329,6 +1441,8 @@ def users_create(
     username: str = Form(default=""),
     email: str = Form(default=""),
     role: str = Form(default="operator"),
+    faculty_id: str = Form(default=""),
+    program_id: str = Form(default=""),
     password: str = Form(default=""),
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
@@ -1352,12 +1466,19 @@ def users_create(
     ).scalar_one_or_none()
     if exists is not None:
         return _redirect(target, f"Username {username} sudah dipakai.", "err")
+    unit_faculty, unit_program, unit_error = _resolve_unit(
+        db, role, faculty_id, program_id
+    )
+    if unit_error:
+        return _redirect(target, unit_error, "err")
 
     user = User(
         name=name,
         username=username,
         email=email or None,
         role=role,
+        faculty_id=unit_faculty,
+        program_id=unit_program,
         password_hash=hash_password(password),
     )
     db.add(user)
@@ -1383,6 +1504,8 @@ def users_edit(
     username: str = Form(default=""),
     email: str = Form(default=""),
     role: str = Form(default="operator"),
+    faculty_id: str = Form(default=""),
+    program_id: str = Form(default=""),
     db: Session = Depends(get_db),
     admin=Depends(require_admin),
     _super=Depends(require_superuser),
@@ -1411,11 +1534,18 @@ def users_edit(
     ).scalar_one_or_none()
     if duplicate is not None:
         return _redirect("/admin/users", f"Username {username} sudah dipakai.", "err")
+    unit_faculty, unit_program, unit_error = _resolve_unit(
+        db, role, faculty_id, program_id
+    )
+    if unit_error:
+        return _redirect("/admin/users", unit_error, "err")
 
     user.name = name
     user.username = username
     user.email = email or None
     user.role = role
+    user.faculty_id = unit_faculty
+    user.program_id = unit_program
     append_event(
         db,
         "user.updated",
@@ -1519,6 +1649,8 @@ def users_change_role(
     request: Request,
     user_id: str,
     role: str = Form(default="operator"),
+    faculty_id: str = Form(default=""),
+    program_id: str = Form(default=""),
     db: Session = Depends(get_db),
     admin=Depends(require_admin),
     _super=Depends(require_superuser),
@@ -1555,8 +1687,7 @@ def master_page(
     edit_type: str = Query(default=""),
     edit_id: str = Query(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    _admin=Depends(require_permission("master")),
 ):
     if tab not in ("institutions", "faculties", "programs"):
         tab = "institutions"
@@ -1611,8 +1742,7 @@ def master_institution_save(
     head_title: str = Form(default="Ketua"),
     address: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    _admin=Depends(require_permission("master")),
     _csrf: None = Depends(require_csrf),
 ):
     target = "/admin/master?tab=institutions"
@@ -1652,8 +1782,7 @@ def master_faculty_save(
     head_name: str = Form(default=""),
     head_title: str = Form(default="Ketua"),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    _admin=Depends(require_permission("master")),
     _csrf: None = Depends(require_csrf),
 ):
     target = "/admin/master?tab=faculties"
@@ -1696,8 +1825,7 @@ def master_program_save(
     head_name: str = Form(default=""),
     head_title: str = Form(default="Ketua Program Studi"),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    _admin=Depends(require_permission("master")),
     _csrf: None = Depends(require_csrf),
 ):
     target = "/admin/master?tab=programs"
@@ -1736,8 +1864,7 @@ def master_delete(
     kind: str,
     obj_id: str,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
-    _super=Depends(require_superuser),
+    _admin=Depends(require_permission("master")),
     _csrf: None = Depends(require_csrf),
 ):
     targets = {
@@ -1819,7 +1946,7 @@ def letters_page(
     status: str = Query(default=""),
     page: int = Query(default=1),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("letters")),
 ):
     conditions = []
     query_text = q.strip()
@@ -1835,6 +1962,11 @@ def letters_page(
         )
     if status in LETTER_STATUSES:
         conditions.append(LetterRequest.status == status)
+    letter_scope = scope_mod.letter_condition(
+        getattr(request.state, "user", None)
+    )
+    if letter_scope is not None:
+        conditions.append(letter_scope)
 
     total = (
         db.scalar(
@@ -1884,9 +2016,12 @@ def letter_detail(
     request: Request,
     letter_id: str,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("letters")),
 ):
     letter = db.get(LetterRequest, letter_id)
+    _denied = _deny_letter(request, letter)
+    if _denied is not None:
+        return _denied
     if letter is None:
         raise HTTPException(status_code=404, detail="Permintaan surat tidak ditemukan.")
     document = db.get(Document, letter.document_id) if letter.document_id else None
@@ -1920,11 +2055,14 @@ def letter_verify(
     letter_id: str,
     next: str = Form(default=""),
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
+    admin=Depends(require_permission("letters")),
     _csrf: None = Depends(require_csrf),
 ):
     target = _safe_next(next, f"/admin/letters/{letter_id}")
     letter = db.get(LetterRequest, letter_id)
+    _denied = _deny_letter(request, letter)
+    if _denied is not None:
+        return _denied
     if letter is None:
         return _redirect(target, "Permintaan tidak ditemukan.", "err")
     if letter.status != "submitted":
@@ -1948,11 +2086,14 @@ def letter_approve(
     letter_no: str = Form(default=""),
     next: str = Form(default=""),
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
+    admin=Depends(require_permission("letters")),
     _csrf: None = Depends(require_csrf),
 ):
     target = _safe_next(next, f"/admin/letters/{letter_id}")
     letter = db.get(LetterRequest, letter_id)
+    _denied = _deny_letter(request, letter)
+    if _denied is not None:
+        return _denied
     if letter is None:
         return _redirect(target, "Permintaan tidak ditemukan.", "err")
     if letter.status not in ("submitted", "verified"):
@@ -2005,11 +2146,14 @@ def letter_reject(
     reason: str = Form(default=""),
     next: str = Form(default=""),
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
+    admin=Depends(require_permission("letters")),
     _csrf: None = Depends(require_csrf),
 ):
     target = _safe_next(next, f"/admin/letters/{letter_id}")
     letter = db.get(LetterRequest, letter_id)
+    _denied = _deny_letter(request, letter)
+    if _denied is not None:
+        return _denied
     if letter is None:
         return _redirect(target, "Permintaan tidak ditemukan.", "err")
     if letter.status in ("signed", "rejected"):
@@ -2040,7 +2184,7 @@ async def letter_upload_document(
     letter_id: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("letters")),
     _csrf: None = Depends(require_csrf),
 ):
     target = f"/admin/letters/{letter_id}"
@@ -2082,6 +2226,23 @@ async def letter_upload_document(
 # ---------------------------------------------------------------------------
 # Format surat & kop surat
 # ---------------------------------------------------------------------------
+
+
+def _resolve_unit(
+    db: Session, role: str, faculty_id: str, program_id: str
+) -> tuple[str | None, str | None, str | None]:
+    """Validasi unit untuk role; kembalikan (faculty_id, program_id, error)."""
+    if role == "operator_fakultas":
+        faculty = db.get(Faculty, faculty_id) if faculty_id else None
+        if faculty is None:
+            return None, None, "Pilih fakultas untuk Operator Fakultas."
+        return faculty.id, None, None
+    if role == "operator_prodi":
+        program = db.get(StudyProgram, program_id) if program_id else None
+        if program is None:
+            return None, None, "Pilih program studi untuk Operator Prodi."
+        return program.faculty_id, program.id, None
+    return None, None, None
 
 
 def _active_signers(db: Session) -> list[SignerProfile]:
@@ -2130,7 +2291,7 @@ def _drive_folders(db: Session) -> list[DriveFolder]:
 def letter_templates_page(
     request: Request,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
 ):
     signers = _active_signers(db)
     return templates.TemplateResponse(
@@ -2153,7 +2314,7 @@ def letter_templates_page(
 def letter_template_new(
     request: Request,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
 ):
     return templates.TemplateResponse(
         request,
@@ -2175,7 +2336,7 @@ def letter_template_edit(
     request: Request,
     template_id: str,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
 ):
     template = db.get(LetterTemplate, template_id)
     if template is None:
@@ -2206,7 +2367,7 @@ def letter_template_save(
     is_active: str = Form(default=""),
     template_id: str = Form(default=""),
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
+    admin=Depends(require_permission("templates")),
     _csrf: None = Depends(require_csrf),
 ):
     letter_type = letter_type.strip()
@@ -2270,7 +2431,7 @@ def letter_template_save(
 def letter_template_toggle(
     template_id: str,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
     _csrf: None = Depends(require_csrf),
 ):
     template = db.get(LetterTemplate, template_id)
@@ -2294,7 +2455,7 @@ def letter_template_toggle(
 def letter_template_delete(
     template_id: str,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
     _csrf: None = Depends(require_csrf),
 ):
     template = db.get(LetterTemplate, template_id)
@@ -2320,16 +2481,24 @@ def letter_template_delete(
 
 @router.post("/letter-templates/preview")
 def letter_template_preview(
+    request: Request,
     body_html: str = Form(default=""),
     letter_id: str = Form(default=""),
     signer_id: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
     _csrf: None = Depends(require_csrf),
 ):
     settings = get_settings()
     signer = db.get(SignerProfile, signer_id) if signer_id else None
     letter = db.get(LetterRequest, letter_id) if letter_id else None
+    if letter is not None:
+        _user = getattr(request.state, "user", None)
+        if _user is not None and not scope_mod.can_access_letter(_user, letter):
+            return JSONResponse(
+                {"html": "", "unknown": [], "error": "Tidak ada akses."},
+                status_code=403,
+            )
     if letter is not None:
         if signer is None and letter.signer_id:
             signer = db.get(SignerProfile, letter.signer_id)
@@ -2351,7 +2520,7 @@ def letter_template_preview(
 def letterhead_page(
     request: Request,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
 ):
     return templates.TemplateResponse(
         request,
@@ -2378,7 +2547,7 @@ async def letterhead_save(
     html_override: str = Form(default=""),
     logo: UploadFile | None = File(default=None),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
     _csrf: None = Depends(require_csrf),
 ):
     settings = get_settings()
@@ -2423,7 +2592,7 @@ async def letterhead_save(
 @router.get("/letterhead/logo")
 def letterhead_logo(
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
 ):
     path = logo_file(get_active_letterhead(db))
     if path is None:
@@ -2434,7 +2603,7 @@ def letterhead_logo(
 @router.get("/letterhead/preview", response_class=HTMLResponse)
 def letterhead_preview(
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
 ):
     return HTMLResponse(
         render_head_preview(
@@ -2463,11 +2632,14 @@ def letter_generate(
     letter_id: str,
     signer_id: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("letters")),
     _csrf: None = Depends(require_csrf),
 ):
     target = f"/admin/letters/{letter_id}"
     letter = db.get(LetterRequest, letter_id)
+    _denied = _deny_letter(request, letter)
+    if _denied is not None:
+        return _denied
     if letter is None:
         return _redirect("/admin/letters", "Permintaan tidak ditemukan.", "err")
     if letter.status != "approved":
@@ -2553,13 +2725,17 @@ def letter_generate(
 
 @router.get("/letters/{letter_id}/preview", response_class=HTMLResponse)
 def letter_preview(
+    request: Request,
     letter_id: str,
     template_id: str = Query(default=""),
     signer_id: str = Query(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("letters")),
 ):
     letter = db.get(LetterRequest, letter_id)
+    _denied = _deny_letter(request, letter)
+    if _denied is not None:
+        return _denied
     if letter is None:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan.")
     template = (
@@ -2589,7 +2765,7 @@ def letter_preview(
 def letter_style_page(
     request: Request,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
 ):
     return templates.TemplateResponse(
         request,
@@ -2628,7 +2804,7 @@ def letter_style_save(
     kop_main_size_pt: str = Form(default="14"),
     kop_address_size_pt: str = Form(default="8.5"),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
     _csrf: None = Depends(require_csrf),
 ):
     style = (
@@ -2672,7 +2848,7 @@ def letter_style_save(
 @router.get("/letter-style/preview", response_class=HTMLResponse)
 def letter_style_preview(
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("templates")),
 ):
     template = (
         db.execute(
@@ -2709,7 +2885,7 @@ def letter_style_preview(
 def email_page(
     request: Request,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("email")),
 ):
     config = get_email_config(db)
     logs = (
@@ -2751,7 +2927,7 @@ def email_save(
     on_generate: str = Form(default=""),
     on_signed: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("email")),
     _csrf: None = Depends(require_csrf),
 ):
     row = db.execute(select(EmailSettings).limit(1)).scalar_one_or_none()
@@ -2802,7 +2978,7 @@ def email_save(
 def email_test(
     to: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("email")),
     _csrf: None = Depends(require_csrf),
 ):
     recipient = to.strip()
@@ -2828,11 +3004,14 @@ def email_test(
 def letter_resend_email(
     letter_id: str,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("letters")),
     _csrf: None = Depends(require_csrf),
 ):
     target = f"/admin/letters/{letter_id}"
     letter = db.get(LetterRequest, letter_id)
+    _denied = _deny_letter(request, letter)
+    if _denied is not None:
+        return _denied
     if letter is None:
         return _redirect("/admin/letters", "Permintaan tidak ditemukan.", "err")
     config = get_email_config(db)
@@ -2856,7 +3035,7 @@ def letter_resend_email(
 def storage_page(
     request: Request,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("storage")),
 ):
     config = get_drive_config(db)
     return templates.TemplateResponse(
@@ -2879,7 +3058,7 @@ async def storage_save(
     folder_id: str = Form(default=""),
     credentials: UploadFile | None = File(default=None),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("storage")),
     _csrf: None = Depends(require_csrf),
 ):
     row = db.execute(select(StorageSettings).limit(1)).scalar_one_or_none()
@@ -2927,7 +3106,7 @@ async def storage_save(
 @router.post("/storage/test")
 def storage_test(
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("storage")),
     _csrf: None = Depends(require_csrf),
 ):
     config = get_drive_config(db)
@@ -2952,7 +3131,7 @@ def storage_folder_add(
     folder_id: str = Form(default=""),
     is_default: str = Form(default=""),
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("storage")),
     _csrf: None = Depends(require_csrf),
 ):
     name = name.strip()
@@ -2987,7 +3166,7 @@ def storage_folder_add(
 def storage_folder_delete(
     ref: str,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("storage")),
     _csrf: None = Depends(require_csrf),
 ):
     row = db.get(DriveFolder, ref)
@@ -3011,7 +3190,7 @@ def storage_folder_delete(
 def storage_folder_default(
     ref: str,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    _admin=Depends(require_permission("storage")),
     _csrf: None = Depends(require_csrf),
 ):
     row = db.get(DriveFolder, ref)
@@ -3023,3 +3202,58 @@ def storage_folder_default(
     return _redirect(
         "/admin/storage", f"Folder '{row.name}' dijadikan default."
     )
+
+
+@router.get("/permissions", response_class=HTMLResponse)
+def permissions_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _super=Depends(require_superuser),
+):
+    current = {
+        role: load_permissions(db, role) for role in CONFIGURABLE_ROLES
+    }
+    return templates.TemplateResponse(
+        request,
+        "admin/permissions.html",
+        _context(
+            request,
+            active="permissions",
+            features=FEATURES,
+            roles=CONFIGURABLE_ROLES,
+            role_labels=ROLE_LABELS,
+            current_permissions=current,
+        ),
+    )
+
+
+@router.post("/permissions")
+async def permissions_save(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _super=Depends(require_superuser),
+    _csrf: None = Depends(require_csrf),
+):
+    form = await request.form()
+    valid = {key for key, _ in FEATURES}
+    for role in CONFIGURABLE_ROLES:
+        selected = {
+            value
+            for key, value in form.multi_items()
+            if key == f"perms_{role}" and value in valid
+        }
+        row = db.get(RolePermission, role)
+        if row is None:
+            row = RolePermission(role=role)
+            db.add(row)
+        row.permissions = sorted(selected)
+        row.updated_at = utcnow()
+    append_event(
+        db,
+        "permissions.saved",
+        {"roles": list(CONFIGURABLE_ROLES)},
+    )
+    db.commit()
+    return _redirect("/admin/permissions", "Hak akses disimpan.")
