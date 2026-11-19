@@ -70,16 +70,16 @@ def init_db() -> None:
     _seed_default_master()
     _seed_role_permissions()
     _seed_letter_defaults()
-    _migrate_letter_template_meta()
+    _cleanup_letter_template_meta()
 
 
-def _migrate_letter_template_meta() -> None:
-    """Pindahkan blok Nomor/Hal ke badan HTML format surat (sekali per baris).
+def _cleanup_letter_template_meta() -> None:
+    """Bersihkan blok Nomor/Hal yang dulu disisipkan otomatis (sekali per baris).
 
-    Dulu renderer menyisipkan blok Nomor/Hal otomatis sehingga tidak bisa
-    diubah dari editor. Sekarang blok itu menjadi bagian body_html; baris lama
-    yang belum punya ditambahi sekali dan ditandai meta_in_body agar tidak
-    terulang walaupun admin menghapus blok tersebut.
+    Renderer lama menambahkan sendiri blok Nomor/Hal di atas badan surat dan
+    tidak bisa diubah dari editor. Blok itu kini ditulis manual di body_html;
+    sisa blok otomatis pada format lama dibuang sekali, ditandai meta_cleanup
+    agar perubahan admin berikutnya tidak pernah disentuh lagi.
     """
     from sqlalchemy import or_, select
 
@@ -92,8 +92,8 @@ def _migrate_letter_template_meta() -> None:
             session.execute(
                 select(LetterTemplate).where(
                     or_(
-                        LetterTemplate.meta_in_body.is_(False),
-                        LetterTemplate.meta_in_body.is_(None),
+                        LetterTemplate.meta_cleanup.is_(False),
+                        LetterTemplate.meta_cleanup.is_(None),
                     )
                 )
             )
@@ -102,8 +102,10 @@ def _migrate_letter_template_meta() -> None:
         )
         for row in rows:
             body = (row.body_html or "").strip()
-            row.body_html = f"{META_BLOCK_HTML}\n{body}" if body else META_BLOCK_HTML
-            row.meta_in_body = True
+            if body.startswith(META_BLOCK_HTML):
+                body = body[len(META_BLOCK_HTML) :].lstrip("\n").strip()
+            row.body_html = body
+            row.meta_cleanup = True
         if rows:
             session.commit()
     finally:
@@ -233,9 +235,9 @@ def _ensure_letter_template_columns() -> None:
             "ALTER TABLE letter_templates ADD COLUMN audience VARCHAR(16)"
             " DEFAULT 'mahasiswa'"
         )
-    if "meta_in_body" not in columns:
+    if "meta_cleanup" not in columns:
         statements.append(
-            "ALTER TABLE letter_templates ADD COLUMN meta_in_body BOOLEAN"
+            "ALTER TABLE letter_templates ADD COLUMN meta_cleanup BOOLEAN"
             " DEFAULT 0"
         )
     if not statements:

@@ -515,9 +515,9 @@ class LetterTemplate(Base):
     letter_type: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     name: Mapped[str] = mapped_column(Text)
     body_html: Mapped[str] = mapped_column(Text, default="")
-    # True bila blok Nomor/Hal sudah menjadi bagian dari body_html (format lama
-    # dimigrasikan sekali saat startup).
-    meta_in_body: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True bila badan surat sudah dibersihkan dari blok Nomor/Hal yang dulu
+    # disisipkan otomatis (migrasi sekali saat startup).
+    meta_cleanup: Mapped[bool] = mapped_column(Boolean, default=False)
     audience: Mapped[str] = mapped_column(String(16), default="mahasiswa")
     signer_id: Mapped[str | None] = mapped_column(
         ForeignKey("signers.id"), nullable=True

@@ -930,7 +930,7 @@ def seed_defaults(db: Session, settings: Settings) -> None:
                 letter_type=letter_type,
                 name=letter_type,
                 body_html=f"{META_BLOCK_HTML}\n{body.strip()}",
-                meta_in_body=True,
+                meta_cleanup=True,
                 audience=audience,
                 is_active=True,
                 created_by="sistem",

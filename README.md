@@ -412,9 +412,10 @@ menyisipkan blok awalnya:
 </table></div>
 ```
 
-Format lama dimigrasikan sekali saat aplikasi mulai: blok tersebut ditambahkan
-ke `body_html` dan ditandai `meta_in_body`, jadi tidak muncul lagi walaupun
-kemudian dihapus admin.
+Format lama tidak ditambahi apa pun: sisa blok Nomor/Hal yang dulu disisipkan
+otomatis dibuang sekali saat aplikasi mulai (ditandai `meta_cleanup`), dan
+sesudahnya isi format tidak pernah disentuh lagi. Format contoh untuk instalasi
+baru sudah memuat blok di atas sebagai titik awal.
 
 Keyword diambil dari data permohonan dan pejabat yang dipilih saat membuat PDF:
 

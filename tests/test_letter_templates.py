@@ -1222,8 +1222,11 @@ def test_nomor_dan_hal_mengikuti_isi_format():
     assert "Surat Uji Meta" in document  # [Hal] = jenis surat
 
 
-def test_migrasi_blok_nomor_hanya_sekali(admin_client):
-    from tte_core.db import _migrate_letter_template_meta, get_session_factory
+def test_bersihkan_blok_nomor_otomatis(admin_client):
+    from sqlalchemy import select
+
+    from tte_core.db import _cleanup_letter_template_meta as _migrate_once
+    from tte_core.db import get_session_factory
     from tte_core.models import LetterTemplate
 
     db = get_session_factory()()
@@ -1231,22 +1234,42 @@ def test_migrasi_blok_nomor_hanya_sekali(admin_client):
         letter_type=f"Surat Lama {uuid.uuid4().hex[:6]}",
         name="Format lama",
         body_html="<p>Isi format lama.</p>",
-        meta_in_body=False,
+        meta_cleanup=False,
     )
     db.add(row)
     db.commit()
     template_id = row.id
+    db.add(
+        LetterTemplate(
+            letter_type=f"Surat Dobel {uuid.uuid4().hex[:6]}",
+            name="Blok otomatis v1",
+            body_html=(
+                '<div class="meta"><table>\n'
+                "  <tr><td>Nomor</td><td>:</td><td>[Nomor_Surat]</td></tr>\n"
+                "  <tr><td>Hal</td><td>:</td><td>[Hal]</td></tr>\n"
+                "</table></div>\n<p>Isi tetap.</p>"
+            ),
+            meta_cleanup=False,
+        )
+    )
+    db.commit()
     db.close()
 
-    _migrate_letter_template_meta()
-    _migrate_letter_template_meta()  # idempoten
+    _migrate_once()
+    _migrate_once()  # idempoten
 
     db = get_session_factory()()
     row = db.get(LetterTemplate, template_id)
-    assert row.body_html.count('class="meta"') == 1
-    assert "[Nomor_Surat]" in row.body_html
-    assert "<p>Isi format lama.</p>" in row.body_html
-    assert row.meta_in_body is True
-    db.delete(row)
+    assert row.body_html == "<p>Isi format lama.</p>"
+    assert row.meta_cleanup is True
+    auto = db.execute(
+        select(LetterTemplate).where(LetterTemplate.name == "Blok otomatis v1")
+    ).scalars().first()
+    assert 'class="meta"' not in auto.body_html
+    assert auto.body_html == "<p>Isi tetap.</p>"
+    for r in db.execute(select(LetterTemplate).where(
+        LetterTemplate.name.in_(["Format lama", "Blok otomatis v1"])
+    )).scalars():
+        db.delete(r)
     db.commit()
     db.close()

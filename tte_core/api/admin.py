@@ -2465,7 +2465,7 @@ def letter_template_save(
         audience if audience in ("mahasiswa", "dosen", "keduanya") else "mahasiswa"
     )
     template.body_html = body_html
-    template.meta_in_body = True
+    template.meta_cleanup = True
     template.signer_id = signer.id if signer else None
     folder = db.get(DriveFolder, drive_folder_ref) if drive_folder_ref else None
     template.drive_folder_ref = folder.id if folder else None
