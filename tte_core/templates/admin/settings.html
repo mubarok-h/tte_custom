@@ -1,0 +1,249 @@
+{% extends "admin/base.html" %}
+{% block title %}Identitas &amp; Aplikasi{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Identitas &amp; Aplikasi</h4>
+    <p class="page-subtitle mb-0">Identitas lembaga, nama aplikasi, dan teks beranda.</p>
+  </div>
+</div>
+
+<ul class="nav nav-pills gap-2 mb-4">
+  {% for key, label in tabs.items() %}
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if tab == key else '' }}" href="/admin/settings?tab={{ key }}">{{ label }}</a>
+  </li>
+  {% endfor %}
+</ul>
+
+{% if tab == 'identity' %}
+<form method="post" action="/admin/settings/save" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="tab" value="identity">
+  <div class="row g-4">
+    <div class="col-12 col-xl-7">
+      <div class="card">
+        <div class="card-header"><h5 class="card-title mb-0">Data lembaga</h5></div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label" for="institution_name">Nama lembaga</label>
+              <input id="institution_name" name="institution_name" class="form-control"
+                     value="{{ row.institution_name or '' if row else '' }}"
+                     placeholder="{{ branding.institution }}">
+              <div class="form-text">Kosongkan untuk memakai nilai dari konfigurasi server.</div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="foundation_name">Nama yayasan</label>
+              <input id="foundation_name" name="foundation_name" class="form-control"
+                     value="{{ row.foundation_name or '' if row else '' }}"
+                     placeholder="Yayasan Lembaga Pendidikan Islam">
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="short_name">Singkatan</label>
+              <input id="short_name" name="short_name" class="form-control"
+                     value="{{ row.short_name or '' if row else '' }}" placeholder="STIT">
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="city">Kota</label>
+              <input id="city" name="city" class="form-control"
+                     value="{{ row.city or '' if row else '' }}" placeholder="{{ branding.location }}">
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="address">Alamat</label>
+              <textarea id="address" name="address" class="form-control" rows="2"
+                        placeholder="Alamat lengkap">{{ row.address or '' if row else '' }}</textarea>
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="phone">Telepon</label>
+              <input id="phone" name="phone" class="form-control"
+                     value="{{ row.phone or '' if row else '' }}" placeholder="(0231) ...">
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="website">Website</label>
+              <input id="website" name="website" class="form-control"
+                     value="{{ row.website or '' if row else '' }}" placeholder="www.contoh.ac.id">
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="email_pub">Email publik</label>
+              <input id="email_pub" name="email_pub" type="email" class="form-control"
+                     value="{{ row.email or '' if row else '' }}" placeholder="info@contoh.ac.id">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-5">
+      <div class="card mb-4">
+        <div class="card-header"><h5 class="card-title mb-0">Logo &amp; favicon</h5></div>
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <img src="{{ branding.logo_url }}" alt="Logo" style="height:64px;width:auto;border-radius:8px;background:#f8fafc;padding:4px">
+            <div class="small text-muted">Logo saat ini</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="logo">Ganti logo</label>
+            <input id="logo" name="logo" type="file" class="form-control" accept=".png,.jpg,.jpeg,.webp">
+            <div class="form-text">PNG/JPG/WebP, maksimal 2 MB. Disarankan PNG transparan.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="favicon">Ganti favicon</label>
+            <input id="favicon" name="favicon" type="file" class="form-control" accept=".png,.jpg,.jpeg,.webp">
+            <div class="form-text">Ukuran 32 dan 192 dibuat otomatis dari gambar ini.</div>
+          </div>
+          <div class="d-flex align-items-center gap-3">
+            <img src="{{ branding.favicon_32_url }}" alt="Favicon 32" width="32" height="32">
+            <img src="{{ branding.favicon_192_url }}" alt="Favicon 192" width="48" height="48">
+            <span class="small text-muted">Pratinjau favicon</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h5 class="card-title mb-0">Kop surat</h5></div>
+        <div class="card-body">
+          <p class="small text-muted">
+            Salin identitas ini ke kop surat PDF. Baris kop yang sudah ada akan ditimpa.
+          </p>
+          <button class="btn btn-outline-primary w-100" type="submit"
+                  formaction="/admin/settings/copy-to-letterhead" formmethod="post"
+                  formenctype="application/x-www-form-urlencoded">
+            <i class="bx bx-copy me-1"></i>Salin ke Kop Surat
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mt-4">
+    <button class="btn btn-primary" type="submit"><i class="bx bx-save me-1"></i>Simpan identitas</button>
+    <a class="btn btn-outline-secondary" href="/admin/settings">Batal</a>
+  </div>
+</form>
+
+{% elif tab == 'app' %}
+<form method="post" action="/admin/settings/save">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="tab" value="app">
+  <div class="card">
+    <div class="card-header"><h5 class="card-title mb-0">Identitas aplikasi</h5></div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="app_name">Nama aplikasi</label>
+          <input id="app_name" name="app_name" class="form-control"
+                 value="{{ row.app_name or '' if row else '' }}" placeholder="{{ branding.app_name }}">
+          <div class="form-text">Dipakai pada judul tab dan header panel admin.</div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="app_tagline">Tagline</label>
+          <input id="app_tagline" name="app_tagline" class="form-control"
+                 value="{{ row.app_tagline or '' if row else '' }}" placeholder="{{ branding.app_tagline }}">
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="footer_credit">Kredit footer</label>
+          <input id="footer_credit" name="footer_credit" class="form-control"
+                 value="{{ row.footer_credit or '' if row else '' }}" placeholder="{{ branding.footer_credit }}">
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="announcement">Banner pengumuman (opsional)</label>
+          <textarea id="announcement" name="announcement" class="form-control" rows="2"
+                    placeholder="Contoh: Layanan tutup 25–26 Desember">{{ row.announcement or '' if row else '' }}</textarea>
+          <div class="form-text">Tampil di atas kartu beranda jika diisi.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="d-flex gap-2 mt-4">
+    <button class="btn btn-primary" type="submit"><i class="bx bx-save me-1"></i>Simpan aplikasi</button>
+    <a class="btn btn-outline-secondary" href="/admin/settings">Batal</a>
+  </div>
+</form>
+
+{% else %}
+<form method="post" action="/admin/settings/save">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="tab" value="home">
+  <div class="row g-4">
+    <div class="col-12 col-xl-7">
+      <div class="card">
+        <div class="card-header"><h5 class="card-title mb-0">Teks beranda</h5></div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label" for="site_title">Judul situs</label>
+            <input id="site_title" name="site_title" class="form-control"
+                   value="{{ row.site_title or '' if row else '' }}"
+                   placeholder="Contoh: Layanan TTE STIT Buntet Pesantren">
+            <div class="form-text">
+              Dipakai sebagai akhiran judul tab browser. Kosongkan untuk memakai nama lembaga.
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-12 col-md-5">
+              <label class="form-label" for="brand_name">Judul header situs</label>
+              <input id="brand_name" name="brand_name" class="form-control"
+                     value="{{ row.brand_name or '' if row else '' }}" placeholder="TTE!">
+              <div class="form-text">Teks tebal di header, mis. “TTE!”.</div>
+            </div>
+            <div class="col-12 col-md-7">
+              <label class="form-label" for="brand_subtitle">Subjudul header</label>
+              <input id="brand_subtitle" name="brand_subtitle" class="form-control"
+                     value="{{ row.brand_subtitle or '' if row else '' }}"
+                     placeholder="{{ branding.institution }} · Tanda Tangan Elektronik">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="hero_pill">Label kecil (pill)</label>
+            <input id="hero_pill" name="hero_pill" class="form-control"
+                   value="{{ row.hero_pill or '' if row else '' }}" placeholder="{{ branding.hero_pill }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="hero_title">Judul utama</label>
+            <input id="hero_title" name="hero_title" class="form-control"
+                   value="{{ row.hero_title or '' if row else '' }}" placeholder="{{ branding.hero_title }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="hero_highlight">Sorotan judul</label>
+            <input id="hero_highlight" name="hero_highlight" class="form-control"
+                   value="{{ row.hero_highlight or '' if row else '' }}" placeholder="{{ branding.hero_highlight }}">
+          </div>
+          <div class="mb-0">
+            <label class="form-label" for="hero_description">Deskripsi</label>
+            <textarea id="hero_description" name="hero_description" class="form-control" rows="3"
+                      placeholder="{{ branding.hero_description }}">{{ row.hero_description or '' if row else '' }}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-5">
+      <div class="card">
+        <div class="card-header"><h5 class="card-title mb-0">Bagian beranda</h5></div>
+        <div class="card-body">
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="show_quick_links" name="show_quick_links" value="1"
+                   {{ 'checked' if branding.show_quick_links else '' }}>
+            <label class="form-check-label" for="show_quick_links">Kartu cepat (Ajukan, Lacak, Validasi, Admin)</label>
+          </div>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="show_flow" name="show_flow" value="1"
+                   {{ 'checked' if branding.show_flow else '' }}>
+            <label class="form-check-label" for="show_flow">Alur layanan empat langkah</label>
+          </div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="show_notice" name="show_notice" value="1"
+                   {{ 'checked' if branding.show_notice else '' }}>
+            <label class="form-check-label" for="show_notice">Catatan “Tentang layanan ini”</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="d-flex gap-2 mt-4">
+    <button class="btn btn-primary" type="submit"><i class="bx bx-save me-1"></i>Simpan beranda</button>
+    <a class="btn btn-outline-secondary" href="/admin/settings">Batal</a>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

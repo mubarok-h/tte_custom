@@ -66,6 +66,10 @@ def create_app() -> FastAPI:
 
     app.include_router(ca_router)
 
+    from .api.branding import router as branding_router
+
+    app.include_router(branding_router)
+
     @app.middleware("http")
     async def protect_api_docs(request, call_next):
         if request.url.path in {"/docs", "/redoc", "/openapi.json"} and not is_authenticated(request):

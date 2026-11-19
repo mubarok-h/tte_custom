@@ -185,16 +185,20 @@
         <form method="post" action="/admin/letters/{{ letter.id }}/generate" id="generate-form">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <div class="mb-3">
-            <label for="gen-signer" class="form-label">Penanda tangan</label>
-            <select id="gen-signer" name="signer_id" class="form-select" required>
+            <label for="gen-signers" class="form-label">Penanda tangan</label>
+            {% set selected_ids = letter.signer_ids or ([template.signer_id] if template and template.signer_id else []) %}
+            <select id="gen-signers" name="signer_ids" class="form-select" multiple size="4" required>
               {% for signer in signers %}
-              <option value="{{ signer.id }}"
-                {{ 'selected' if (letter_signer and signer.id == letter_signer.id) or (not letter_signer and template.signer_id == signer.id) else '' }}>
+              <option value="{{ signer.id }}" {{ 'selected' if signer.id in selected_ids else '' }}>
                 {{ signer.name }} · {{ signer.jabatan }} ({{ signer.nip }})
               </option>
               {% endfor %}
             </select>
-            <div class="form-text">Nama dan jabatan ini dicetak di isi surat dan dipakai untuk TTE.</div>
+            <div class="form-text">
+              Pilih 1–4 penanda tangan (Ctrl/Cmd untuk memilih lebih dari satu).
+              Urutan mengikuti daftar. Blok tanda tangan di isi surat menyesuaikan
+              jumlah yang dipilih lewat keyword <span class="mono">[blok_ttd], [blok_ttd_2] … [blok_ttd_4]</span>.
+            </div>
           </div>
           <button class="btn btn-primary w-100" type="submit">
             <i class="bx bx-file me-1"></i>{{ 'Buat ulang PDF' if document else 'Buat PDF surat' }}
@@ -263,13 +267,19 @@
 {% block scripts %}
 <script>
 (function () {
-  const select = document.getElementById('gen-signer');
+  const select = document.getElementById('gen-signers');
   const link = document.getElementById('preview-link');
   if (!select || !link) return;
   const base = link.getAttribute('href').split('?')[0];
-  select.addEventListener('change', function () {
-    link.setAttribute('href', base + '?signer_id=' + encodeURIComponent(select.value));
-  });
+  function sync() {
+    const first = select.selectedOptions[0];
+    link.setAttribute(
+      'href',
+      first ? base + '?signer_id=' + encodeURIComponent(first.value) : base
+    );
+  }
+  select.addEventListener('change', sync);
+  sync();
 })();
 </script>
 {% endblock %}

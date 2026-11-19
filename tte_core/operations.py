@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from . import drive
 from .api.schemas import SignResult
+from .branding import load_branding
 from .audit import append_event
 from .config import Settings, get_settings
 from .drive import DriveError
@@ -198,7 +199,7 @@ def create_sign_request(
         document_id=doc.id,
         signer_id=signer.id,
         reason=reason or "Pengesahan Dokumen Resmi",
-        location=location or settings.location,
+        location=location or load_branding(db).location,
         status="pending",
     )
     db.add(req)
@@ -303,7 +304,8 @@ def sign_request(
         .order_by(LetterRequest.submitted_at.desc())
         .limit(1)
     ).scalar_one_or_none()
-    institution = letter.institution_name if letter else settings.institution
+    branding = load_branding(db)
+    institution = letter.institution_name if letter else branding.institution
     faculty = letter.faculty_name if letter else None
     program = letter.program_name if letter else None
 
@@ -322,7 +324,7 @@ def sign_request(
             signer_name=signer.name,
             jabatan=signer.jabatan,
             reason=req.reason or "Pengesahan Dokumen Resmi",
-            location=req.location or settings.location,
+            location=req.location or branding.location,
             field_index=field_index,
             institution=institution,
             faculty=faculty,

@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..branding import load_branding
 from ..db import get_db
 from ..verify_service import VerificationError, verify_document
 
@@ -19,13 +20,17 @@ templates.env.globals["current_year"] = datetime.now().year
 
 
 @router.get("/", response_class=HTMLResponse)
-def index(request: Request) -> HTMLResponse:
+def index(
+    request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
     settings = get_settings()
+    branding = load_branding(db)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
-            "institution": settings.institution,
+            "institution": branding.institution,
+            "branding": branding,
             "verify_base_url": settings.verify_base_url,
         },
     )
@@ -47,7 +52,8 @@ def verify_page(
             request,
             "verify.html",
             {
-                "institution": get_settings().institution,
+                "institution": load_branding(db).institution,
+                "branding": load_branding(db),
                 "result": None,
                 "error": exc.message,
                 "status": "NOT_FOUND" if exc.status_code == 404 else "ERROR",
@@ -58,7 +64,8 @@ def verify_page(
         request,
         "verify.html",
         {
-            "institution": get_settings().institution,
+            "institution": load_branding(db).institution,
+            "branding": load_branding(db),
             "result": result,
             "error": None,
             "status": result.get("status", "UNKNOWN"),

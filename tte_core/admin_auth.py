@@ -35,6 +35,7 @@ FEATURES: tuple[tuple[str, str], ...] = (
     ("master", "Lembaga & Prodi"),
     ("signers", "Penanda Tangan"),
     ("users", "Pengguna"),
+    ("settings", "Identitas & Aplikasi"),
     ("audit", "Audit Log"),
     ("email", "Email"),
     ("storage", "Penyimpanan"),
@@ -229,6 +230,9 @@ def require_admin(
         program_id=user.program_id,
     )
     request.state.user = identity
+    from .branding import load_branding
+
+    request.state.branding = load_branding(db)
     return identity
 
 

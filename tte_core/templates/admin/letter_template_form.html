@@ -108,8 +108,17 @@
           <div class="keyword-group">
             <div class="keyword-group-title">Blok siap pakai</div>
             <div class="keyword-chips">
-              <button type="button" class="keyword-chip" data-keyword="blok_ttd" data-raw="1" title="Kota, tanggal, jabatan, nama, NIP">
-                Blok tanda tangan
+              <button type="button" class="keyword-chip" data-keyword="blok_ttd" data-raw="1" data-token="blok_ttd" title="Satu kolom tanda tangan">
+                1 penanda tangan
+              </button>
+              <button type="button" class="keyword-chip" data-keyword="blok_ttd_2" data-raw="1" data-token="blok_ttd_2" title="Dua kolom tanda tangan">
+                2 penanda tangan
+              </button>
+              <button type="button" class="keyword-chip" data-keyword="blok_ttd_3" data-raw="1" data-token="blok_ttd_3" title="Tiga kolom tanda tangan">
+                3 penanda tangan
+              </button>
+              <button type="button" class="keyword-chip" data-keyword="blok_ttd_4" data-raw="1" data-token="blok_ttd_4" title="Empat kolom tanda tangan">
+                4 penanda tangan
               </button>
             </div>
           </div>
@@ -206,7 +215,9 @@
   document.querySelectorAll('.keyword-chip').forEach(function (chip) {
     chip.addEventListener('click', function () {
       const key = chip.dataset.keyword;
-      const token = chip.dataset.raw ? '[blok_ttd]' : '[' + styleKeyword(key) + ']';
+      const token = chip.dataset.raw
+        ? '[' + (chip.dataset.token || 'blok_ttd') + ']'
+        : '[' + styleKeyword(key) + ']';
       const start = body.selectionStart || 0;
       const end = body.selectionEnd || 0;
       body.value = body.value.slice(0, start) + token + body.value.slice(end);

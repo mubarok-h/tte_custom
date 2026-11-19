@@ -407,7 +407,10 @@ Keyword diambil dari data permohonan dan pejabat yang dipilih saat membuat PDF:
 | `[NAMA]` | kapital semua |
 | `[nama]` | huruf kecil semua |
 | `[Nama]` | awal kata kapital |
-| `[blok_ttd]` | kota, tanggal, jabatan, nama, NIP |
+| `[blok_ttd]` | blok tanda tangan 1 kolom |
+| `[blok_ttd_2]` | 2 kolom tanda tangan |
+| `[blok_ttd_3]` | 3 kolom tanda tangan |
+| `[blok_ttd_4]` | 4 kolom tanda tangan |
 
 Keyword yang tersedia: identitas pemohon (`nama`, `nim`, `tempat_lahir`,
 `tanggal_lahir`, `email`, `telepon`, `alamat`), akademik (`lembaga`, `fakultas`,
@@ -478,6 +481,25 @@ tidak dikenal, pembuatan PDF ditolak agar surat tidak tercetak dengan teks
 surat disimpan sebagai teks pada permohonan.
 
 ---
+
+### Identitas lembaga & aplikasi
+
+Halaman **Sistem → Identitas & Aplikasi** mengatur:
+
+- **Identitas**: nama lembaga, yayasan, singkatan, kota, alamat, telepon,
+  email publik, website, logo, dan favicon.
+- **Aplikasi**: nama aplikasi, tagline, kredit footer, banner pengumuman.
+- **Beranda**: teks hero dan sakelar untuk kartu cepat, alur layanan, serta
+  catatan “Tentang layanan ini”.
+
+Nilai kosong otomatis memakai `.env` (`TTE_INSTITUTION`, `TTE_LOCATION`,
+`TTE_APP_NAME`) sehingga instalasi lama tidak berubah. Logo dan favicon
+disimpan di `data/branding/` dan disajikan lewat `/branding/<berkas>`; favicon
+32 dan 192 dibuat otomatis dari gambar unggahan. Tombol **Salin ke Kop Surat**
+mengisi baris kop PDF dari identitas.
+
+Fitur ini dapat didelegasikan lewat **Hak Akses** (baris “Identitas &
+Aplikasi”), dengan default hanya Administrator.
 
 ### Hak akses per role
 

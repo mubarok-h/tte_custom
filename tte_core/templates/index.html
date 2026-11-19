@@ -5,16 +5,14 @@
   <div class="hero-content">
     <div class="hero-pill">
       <span class="dot"></span>
-      Layanan Persuratan &amp; TTE Internal · Aktif 24 Jam
+      {{ branding.hero_pill if branding else 'Layanan Persuratan & TTE Internal' }}
     </div>
     <h1>
-      Urus Surat Akademik
-      <span class="grad">Lebih Cepat &amp; Terverifikasi.</span>
+      {{ branding.hero_title if branding else 'Urus Surat Akademik' }}
+      {% if branding and branding.hero_highlight %}<span class="grad">{{ branding.hero_highlight }}</span>{% endif %}
     </h1>
     <p>
-      Ajukan surat keterangan aktif kuliah, surat pengantar penelitian, atau
-      surat akademik lain langsung dari ponsel. Tata Usaha memproses, lalu
-      dokumen diterbitkan dengan tanda tangan elektronik {{ institution }}.
+      {{ branding.hero_description if branding else 'Ajukan surat akademik langsung dari ponsel.' }}
     </p>
     <div class="hero-actions">
       <a class="btn-light" href="/permohonan">
@@ -32,6 +30,10 @@
   </div>
 </section>
 
+{% if branding and branding.announcement %}
+<div class="notice" style="margin-bottom:16px">{{ branding.announcement }}</div>
+{% endif %}
+{% if not branding or branding.show_quick_links %}
 <div class="quick-grid">
   <a class="quick" href="/permohonan">
     <span class="quick-icon teal"><i class="bx bx-paper-plane"></i></span>
@@ -62,7 +64,9 @@
     </div>
   </a>
 </div>
+{% endif %}
 
+{% if not branding or branding.show_flow %}
 <section class="card" style="margin-top:20px">
   <div class="eyebrow"><i class="bx bx-list-check"></i>Alur layanan</div>
   <h2 style="margin-top:14px">Empat langkah, transparan</h2>
@@ -93,6 +97,7 @@
     <a class="btn secondary" href="/permohonan/validasi"><i class="bx bx-badge-check"></i>Validasi Surat</a>
   </div>
 </section>
+{% endif %}
 
 <section class="card" style="margin-top:20px">
   <div class="eyebrow"><i class="bx bx-shield-quarter"></i>Verifikasi dokumen</div>
@@ -110,10 +115,12 @@
   </div>
 </section>
 
+{% if not branding or branding.show_notice %}
 <div class="notice">
   <strong>Tentang layanan ini.</strong>
   Aplikasi ini merupakan layanan <strong>tanda tangan elektronik
   {{ institution }} Cirebon</strong>. Setiap dokumen ditandatangani secara
   kriptografis dan dapat diverifikasi keasliannya melalui portal ini.
 </div>
+{% endif %}
 {% endblock %}

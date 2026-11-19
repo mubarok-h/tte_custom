@@ -65,6 +65,7 @@ def init_db() -> None:
     _ensure_document_columns()
     _ensure_letter_template_columns()
     _ensure_user_columns()
+    _ensure_site_settings_columns()
     _seed_default_admin()
     _seed_default_master()
     _seed_role_permissions()
@@ -100,6 +101,8 @@ def _ensure_letter_columns() -> None:
         statements.append(
             "ALTER TABLE letter_requests ADD COLUMN employment_status VARCHAR(32)"
         )
+    if "signer_ids" not in columns:
+        statements.append("ALTER TABLE letter_requests ADD COLUMN signer_ids JSON")
     if not statements:
         return
     with engine.begin() as conn:
@@ -213,6 +216,31 @@ def _ensure_user_columns() -> None:
         statements.append("ALTER TABLE users ADD COLUMN faculty_id TEXT")
     if "program_id" not in columns:
         statements.append("ALTER TABLE users ADD COLUMN program_id TEXT")
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
+def _ensure_site_settings_columns() -> None:
+    """Tambahkan kolom baru pada tabel site_settings (DB lama)."""
+    from sqlalchemy import inspect, text
+
+    engine = get_engine()
+    inspector = inspect(engine)
+    if "site_settings" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("site_settings")}
+    statements = []
+    if "site_title" not in columns:
+        statements.append("ALTER TABLE site_settings ADD COLUMN site_title TEXT")
+    if "brand_name" not in columns:
+        statements.append("ALTER TABLE site_settings ADD COLUMN brand_name TEXT")
+    if "brand_subtitle" not in columns:
+        statements.append(
+            "ALTER TABLE site_settings ADD COLUMN brand_subtitle TEXT"
+        )
     if not statements:
         return
     with engine.begin() as conn:

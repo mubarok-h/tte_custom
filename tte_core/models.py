@@ -336,6 +336,7 @@ class LetterRequest(Base):
     signer_id: Mapped[str | None] = mapped_column(
         ForeignKey("signers.id"), nullable=True
     )
+    signer_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     document_id: Mapped[str | None] = mapped_column(
         ForeignKey("documents.id"), nullable=True, index=True
@@ -354,6 +355,48 @@ class DriveFolder(Base):
     folder_id: Mapped[str] = mapped_column(Text)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class SiteSettings(Base):
+    """Identitas lembaga, identitas aplikasi, dan pengaturan beranda."""
+
+    __tablename__ = "site_settings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    # Identitas lembaga
+    institution_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    foundation_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    short_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    city: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    website: Mapped[str | None] = mapped_column(Text, nullable=True)
+    logo_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    favicon_32_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    favicon_192_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Identitas aplikasi
+    app_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    site_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brand_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brand_subtitle: Mapped[str | None] = mapped_column(Text, nullable=True)
+    app_tagline: Mapped[str | None] = mapped_column(Text, nullable=True)
+    footer_credit: Mapped[str | None] = mapped_column(Text, nullable=True)
+    announcement: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Beranda
+    hero_pill: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hero_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hero_highlight: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hero_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    show_quick_links: Mapped[bool] = mapped_column(Boolean, default=True)
+    show_flow: Mapped[bool] = mapped_column(Boolean, default=True)
+    show_notice: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
 

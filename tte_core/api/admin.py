@@ -45,6 +45,7 @@ from ..admin_auth import (
     weak_credentials,
 )
 from ..audit import append_event, verify_chain
+from ..branding import get_site_settings, load_branding
 from ..config import get_settings
 from ..db import get_db
 from ..mailer import (
@@ -85,6 +86,7 @@ from ..models import (
     RolePermission,
     SignerProfile,
     SignRequest,
+    SiteSettings,
     StudyProgram,
     User,
     VerificationToken,
@@ -225,9 +227,11 @@ templates.env.globals["current_year"] = datetime.now().year
 
 def _context(request: Request, *, active: str, **extra) -> dict:
     settings = get_settings()
+    branding = getattr(request.state, "branding", None)
     context = {
         "request": request,
-        "institution": settings.institution,
+        "institution": branding.institution if branding else settings.institution,
+        "branding": branding,
         "active": active,
         "csrf": csrf_token(settings),
         "msg": request.query_params.get("msg"),
@@ -343,15 +347,21 @@ def _record_login_failure(ip: str) -> None:
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_page(request: Request, next: str = Query(default="/admin")):
+def login_page(
+    request: Request,
+    next: str = Query(default="/admin"),
+    db: Session = Depends(get_db),
+):
     if is_authenticated(request):
         return RedirectResponse(_safe_next(next), status_code=303)
     settings = get_settings()
+    branding = load_branding(db)
     return templates.TemplateResponse(
         request,
         "admin/login.html",
         {
-            "institution": settings.institution,
+            "institution": branding.institution,
+            "branding": branding,
             "csrf": csrf_token(settings),
             "next": _safe_next(next),
             "error": None,
@@ -377,11 +387,13 @@ def login_submit(
     target = _safe_next(next)
 
     def failed(message: str, status_code: int = 401):
+        branding = load_branding(db)
         return templates.TemplateResponse(
             request,
             "admin/login.html",
             {
-                "institution": settings.institution,
+                "institution": branding.institution,
+                "branding": branding,
                 "csrf": csrf_token(settings),
                 "next": target,
                 "error": message,
@@ -2061,6 +2073,14 @@ def letter_detail(
                 if letter.signer_id
                 else None
             ),
+            letter_signers=[
+                row
+                for row in (
+                    db.get(SignerProfile, item)
+                    for item in (letter.signer_ids or [])
+                )
+                if row is not None
+            ],
             current_path=f"/admin/letters/{letter.id}",
         ),
     )
@@ -2543,7 +2563,7 @@ def letter_template_preview(
             signer = db.get(SignerProfile, letter.signer_id)
         context = build_context(letter, signer, settings)
     else:
-        context = sample_context(settings)
+        context = sample_context(settings, load_branding(db))
 
     document, unknown = render_preview_html(
         body_html,
@@ -2670,6 +2690,7 @@ def letter_generate(
     request: Request,
     letter_id: str,
     signer_id: str = Form(default=""),
+    signer_ids: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
     _admin=Depends(require_permission("letters")),
     _csrf: None = Depends(require_csrf),
@@ -2692,16 +2713,25 @@ def letter_generate(
             target, "Format surat untuk jenis ini belum tersedia.", "err"
         )
 
-    signer = db.get(SignerProfile, signer_id) if signer_id else None
-    if signer is None and template.signer_id:
-        signer = db.get(SignerProfile, template.signer_id)
-    if signer is None:
+    selected_ids = [item for item in (signer_ids or []) if item]
+    if not selected_ids and signer_id:
+        selected_ids = [signer_id]
+    if not selected_ids and template.signer_id:
+        selected_ids = [template.signer_id]
+    if not selected_ids:
         active = _active_signers(db)
-        signer = active[0] if active else None
-    if signer is None:
+        selected_ids = [active[0].id] if active else []
+
+    chosen: list[SignerProfile] = []
+    for item in selected_ids:
+        row = db.get(SignerProfile, item)
+        if row is not None and row.status == "active" and row not in chosen:
+            chosen.append(row)
+    if not chosen:
         return _redirect(
             target, "Tambahkan penanda tangan aktif terlebih dahulu.", "err"
         )
+    signer = chosen[0]
 
     existing = db.get(Document, letter.document_id) if letter.document_id else None
     if existing is not None and existing.status == "signed":
@@ -2717,6 +2747,8 @@ def letter_generate(
         signer=signer,
         settings=settings,
         style=get_active_style(db),
+        signers=chosen,
+        branding=load_branding(db),
     )
     if unknown:
         listing = ", ".join(f"[{item}]" for item in unknown[:8])
@@ -2743,6 +2775,7 @@ def letter_generate(
     )
     letter.document_id = doc.id
     letter.signer_id = signer.id
+    letter.signer_ids = [row.id for row in chosen]
     letter.template_id = template.id
     append_event(
         db,
@@ -2788,6 +2821,15 @@ def letter_preview(
     signer = db.get(SignerProfile, signer_id) if signer_id else None
     if signer is None and letter.signer_id:
         signer = db.get(SignerProfile, letter.signer_id)
+    signers = [
+        row
+        for row in (
+            db.get(SignerProfile, item) for item in (letter.signer_ids or [])
+        )
+        if row is not None
+    ]
+    if not signers and signer is not None:
+        signers = [signer]
     document_html, _unknown = render_letter_html(
         letter=letter,
         template=template,
@@ -2796,6 +2838,8 @@ def letter_preview(
         settings=settings,
         logo_src="/admin/letterhead/logo",
         style=get_active_style(db),
+        signers=signers,
+        branding=load_branding(db),
     )
     return HTMLResponse(document_html)
 
@@ -2912,7 +2956,7 @@ def letter_style_preview(
     settings = get_settings()
     document, _unknown = render_preview_html(
         body,
-        sample_context(settings),
+        sample_context(settings, load_branding(db)),
         get_active_letterhead(db),
         logo_src="/admin/letterhead/logo",
         style=get_active_style(db),
@@ -3296,3 +3340,226 @@ async def permissions_save(
     )
     db.commit()
     return _redirect("/admin/permissions", "Hak akses disimpan.")
+
+
+# ---------------------------------------------------------------------------
+# Identitas lembaga & pengaturan aplikasi
+# ---------------------------------------------------------------------------
+
+SETTINGS_TABS = {
+    "identity": "Identitas",
+    "app": "Aplikasi",
+    "home": "Beranda",
+}
+
+
+async def _store_image(upload: UploadFile, prefix: str) -> tuple[str, bytes]:
+    from PIL import Image
+
+    from ..branding import IMAGE_EXTENSIONS, branding_dir
+
+    data = await upload.read()
+    if not data:
+        raise ValueError("Berkas kosong.")
+    if len(data) > 2 * 1024 * 1024:
+        raise ValueError("Ukuran gambar maksimal 2 MB.")
+    suffix = Path(upload.filename or "").suffix.lower()
+    if suffix not in IMAGE_EXTENSIONS:
+        raise ValueError("Format harus PNG, JPG, atau WebP.")
+    try:
+        from io import BytesIO
+
+        with Image.open(BytesIO(data)) as image:
+            image.verify()
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(f"Gambar tidak valid: {exc}") from exc
+
+    import hashlib
+
+    digest = hashlib.sha256(data).hexdigest()[:12]
+    name = f"{prefix}-{digest}{suffix}"
+    (branding_dir() / name).write_bytes(data)
+    return name, data
+
+
+def _store_favicons(data: bytes) -> tuple[str, str]:
+    from io import BytesIO
+
+    from PIL import Image
+
+    from ..branding import branding_dir
+
+    import hashlib
+
+    digest = hashlib.sha256(data).hexdigest()[:12]
+    names = []
+    for size in (32, 192):
+        with Image.open(BytesIO(data)) as image:
+            icon = image.convert("RGBA").resize((size, size), Image.LANCZOS)
+            name = f"favicon-{size}-{digest}.png"
+            icon.save(branding_dir() / name, format="PNG")
+        names.append(name)
+    return names[0], names[1]
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(
+    request: Request,
+    tab: str = Query(default="identity"),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_permission("settings")),
+):
+    from ..branding import get_site_settings, load_branding
+
+    active_tab = tab if tab in SETTINGS_TABS else "identity"
+    row = get_site_settings(db)
+    return templates.TemplateResponse(
+        request,
+        "admin/settings.html",
+        _context(
+            request,
+            active="settings",
+            tab=active_tab,
+            tabs=SETTINGS_TABS,
+            row=row,
+            branding=load_branding(db),
+        ),
+    )
+
+
+@router.post("/settings/save")
+async def settings_save(
+    request: Request,
+    tab: str = Form(default="identity"),
+    institution_name: str = Form(default=""),
+    foundation_name: str = Form(default=""),
+    short_name: str = Form(default=""),
+    city: str = Form(default=""),
+    address: str = Form(default=""),
+    phone: str = Form(default=""),
+    email_pub: str = Form(default=""),
+    website: str = Form(default=""),
+    app_name: str = Form(default=""),
+    app_tagline: str = Form(default=""),
+    footer_credit: str = Form(default=""),
+    announcement: str = Form(default=""),
+    site_title: str = Form(default=""),
+    brand_name: str = Form(default=""),
+    brand_subtitle: str = Form(default=""),
+    hero_pill: str = Form(default=""),
+    hero_title: str = Form(default=""),
+    hero_highlight: str = Form(default=""),
+    hero_description: str = Form(default=""),
+    logo: UploadFile | None = File(default=None),
+    favicon: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_permission("settings")),
+    _csrf: None = Depends(require_csrf),
+):
+    from ..branding import get_site_settings
+
+    # Toggle dibaca dari form mentah karena checkbox yang tidak dicentang
+    # tidak dikirim oleh browser.
+    form = await request.form()
+    toggles = {key for key in form.keys() if key.startswith("show_")}
+
+    active_tab = tab if tab in SETTINGS_TABS else "identity"
+    row = get_site_settings(db)
+    if row is None:
+        row = SiteSettings()
+        db.add(row)
+
+    if active_tab == "identity":
+        row.institution_name = institution_name.strip() or None
+        row.foundation_name = foundation_name.strip() or None
+        row.short_name = short_name.strip() or None
+        row.city = city.strip() or None
+        row.address = address.strip() or None
+        row.phone = phone.strip() or None
+        row.email = email_pub.strip() or None
+        row.website = website.strip() or None
+
+        if logo is not None and logo.filename:
+            try:
+                name, _data = await _store_image(logo, "logo")
+                row.logo_path = name
+            except ValueError as exc:
+                return _redirect(
+                    f"/admin/settings?tab={active_tab}", str(exc), "err"
+                )
+        if favicon is not None and favicon.filename:
+            try:
+                _name, data = await _store_image(favicon, "favicon-src")
+                row.favicon_32_path, row.favicon_192_path = _store_favicons(data)
+            except ValueError as exc:
+                return _redirect(
+                    f"/admin/settings?tab={active_tab}", str(exc), "err"
+                )
+
+    elif active_tab == "app":
+        row.app_name = app_name.strip() or None
+        row.app_tagline = app_tagline.strip() or None
+        row.footer_credit = footer_credit.strip() or None
+        row.announcement = announcement.strip() or None
+
+    else:
+        row.site_title = site_title.strip() or None
+        row.brand_name = brand_name.strip() or None
+        row.brand_subtitle = brand_subtitle.strip() or None
+        row.hero_pill = hero_pill.strip() or None
+        row.hero_title = hero_title.strip() or None
+        row.hero_highlight = hero_highlight.strip() or None
+        row.hero_description = hero_description.strip() or None
+        row.show_quick_links = "show_quick_links" in toggles
+        row.show_flow = "show_flow" in toggles
+        row.show_notice = "show_notice" in toggles
+
+    row.updated_at = utcnow()
+    append_event(db, "settings.saved", {"tab": active_tab})
+    db.commit()
+    return _redirect(
+        f"/admin/settings?tab={active_tab}", "Pengaturan disimpan."
+    )
+
+
+@router.post("/settings/copy-to-letterhead")
+def settings_copy_to_letterhead(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_permission("settings")),
+    _csrf: None = Depends(require_csrf),
+):
+    from ..branding import branding_dir
+
+    branding = load_branding(db)
+    head = get_active_letterhead(db)
+    if head is None:
+        head = LetterHead(is_active=True)
+        db.add(head)
+
+    head.line1 = branding.foundation or branding.institution
+    head.line2 = branding.institution
+    head.line3 = branding.short_name or None
+    head.line4 = branding.location or None
+    contact = " · ".join(
+        item
+        for item in (branding.phone, branding.email, branding.website)
+        if item
+    )
+    head.line5 = " — ".join(
+        item for item in (branding.address, contact) if item
+    ) or None
+    head.updated_at = utcnow()
+
+    row = get_site_settings(db)
+    if row is not None and row.logo_path:
+        logo = branding_dir() / Path(row.logo_path).name
+        if logo.exists():
+            head.logo_path = str(logo)
+
+    append_event(db, "settings.copied_to_letterhead", {})
+    db.commit()
+    return _redirect(
+        "/admin/letterhead",
+        "Identitas disalin ke kop surat. Periksa pratinjaunya.",
+    )

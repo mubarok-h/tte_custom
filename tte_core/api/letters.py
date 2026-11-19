@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ..admin_auth import csrf_token, require_csrf
 from ..audit import append_event
+from ..branding import load_branding
 from ..config import get_settings
 from ..db import get_db
 from ..models import (
@@ -181,9 +182,11 @@ def _form_context(
 ) -> dict:
     settings = get_settings()
     master = _master_data(db)
+    branding = load_branding(db)
     return {
         "request": request,
-        "institution": settings.institution,
+        "institution": branding.institution,
+        "branding": branding,
         "csrf": csrf_token(settings),
         "master_data": master,
         "master_json": master,
@@ -444,7 +447,8 @@ def request_status(
         "permohonan_status.html",
         {
             "request": request,
-            "institution": settings.institution,
+            "institution": load_branding(db).institution,
+            "branding": load_branding(db),
             "q": query_text,
             "letters": results,
             "msg": request.query_params.get("msg"),
@@ -488,9 +492,11 @@ def _validation_context(
                 f"{settings.verify_base_url}/v/{document.short_id}?t={token}"
             )
 
+    branding = load_branding(db)
     return {
         "request": request,
-        "institution": settings.institution,
+        "institution": branding.institution,
+        "branding": branding,
         "csrf": csrf_token(settings),
         "no": query_text,
         "letter": letter,

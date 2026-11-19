@@ -125,7 +125,12 @@ ALIASES = {
 }
 
 # Keyword yang menghasilkan HTML mentah (tidak di-escape).
-RAW_KEYWORDS = {"blok_ttd"}
+RAW_KEYWORDS = {
+    "blok_ttd",
+    "blok_ttd_2",
+    "blok_ttd_3",
+    "blok_ttd_4",
+}
 
 _PLACEHOLDER = re.compile(r"\[([^\[\]\n]{1,60})\]")
 
@@ -194,23 +199,30 @@ def render_text(text: str, context: dict[str, str]) -> tuple[str, list[str]]:
     return _PLACEHOLDER.sub(replace, text), unknown
 
 
-def signature_block(
-    letter: LetterRequest,
-    signer: SignerProfile | None,
-    settings: Settings,
+def _ttd_date(
+    letter: LetterRequest, settings: Settings, branding=None
 ) -> str:
-    if signer is None:
-        return ""
     tanggal = _format_tanggal(
         letter.approved_at
         or letter.verified_at
         or letter.submitted_at
         or datetime.now(timezone.utc)
     )
+    city = branding.location if branding else settings.location
+    return f"{_html_value(city)}, {_html_value(tanggal)}"
+
+
+def signature_block(
+    letter: LetterRequest,
+    signer: SignerProfile | None,
+    settings: Settings,
+    branding=None,
+) -> str:
+    if signer is None:
+        return ""
     return (
         '<div class="ttd">'
-        f'<div class="ttd-place">{_html_value(settings.location)}, '
-        f"{_html_value(tanggal)}</div>"
+        f'<div class="ttd-place">{_ttd_date(letter, settings, branding)}</div>'
         f'<div class="ttd-title">{_html_value(signer.jabatan)}</div>'
         '<div class="ttd-space"></div>'
         f'<div class="ttd-name">{_html_value(signer.name)}</div>'
@@ -219,10 +231,71 @@ def signature_block(
     )
 
 
+def signature_block_multi(
+    letter: LetterRequest,
+    people: list[SignerProfile],
+    settings: Settings,
+    columns: int,
+    branding=None,
+) -> str:
+    """Blok tanda tangan 1-4 kolom.
+
+    - 2 penanda tangan: berdampingan dalam satu baris.
+    - 3 penanda tangan: 2 berdampingan, satu di baris bawah tepat di tengah.
+    - 4 penanda tangan: 2 berdampingan, 2 lagi di baris bawah.
+    """
+    if columns <= 1:
+        return signature_block(
+            letter, people[0] if people else None, settings, branding
+        )
+
+    def cell(index: int) -> str:
+        person = people[index] if index < len(people) else None
+        if person is None:
+            return (
+                '<div class="ttd-col">'
+                '<div class="ttd-title">&nbsp;</div>'
+                '<div class="ttd-space"></div>'
+                '<div class="ttd-name">&nbsp;</div>'
+                '<div class="ttd-nip">&nbsp;</div>'
+                "</div>"
+            )
+        return (
+            '<div class="ttd-col">'
+            f'<div class="ttd-title">{_html_value(person.jabatan)}</div>'
+            '<div class="ttd-space"></div>'
+            f'<div class="ttd-name">{_html_value(person.name)}</div>'
+            f'<div class="ttd-nip">NIP. {_html_value(person.nip)}</div>'
+            "</div>"
+        )
+
+    cells = [cell(index) for index in range(columns)]
+    if columns == 3:
+        rows = [cells[:2], cells[2:]]
+    else:
+        rows = [cells[index : index + 2] for index in range(0, columns, 2)]
+
+    rendered_rows = []
+    for row in rows:
+        modifier = " ttd-row-single" if len(row) == 1 else ""
+        rendered_rows.append(
+            f'<div class="ttd-row{modifier}">{"".join(row)}</div>'
+        )
+
+    return (
+        '<div class="ttd-multi">'
+        f'<div class="ttd-date">{_ttd_date(letter, settings, branding)}</div>'
+        f'{"".join(rendered_rows)}'
+        "</div>"
+    )
+
+
 def build_context(
     letter: LetterRequest,
     signer: SignerProfile | None,
     settings: Settings,
+    signers: list[SignerProfile] | None = None,
+    branding=None,
 ) -> dict[str, str]:
     tanggal = _format_tanggal(
         letter.approved_at
@@ -237,6 +310,10 @@ def build_context(
     else:
         tahun = str(datetime.now(timezone.utc).year)
 
+    people = [person for person in (signers or []) if person is not None]
+    if not people and signer is not None:
+        people = [signer]
+
     values = {
         "nama": letter.applicant_name or "",
         "nim": letter.nim or "",
@@ -248,7 +325,8 @@ def build_context(
         "email": letter.email or "",
         "telepon": letter.phone or "",
         "alamat": letter.address or "",
-        "lembaga": letter.institution_name or settings.institution,
+        "lembaga": letter.institution_name
+        or (branding.institution if branding else settings.institution),
         "fakultas": letter.faculty_name or "",
         "prodi": letter.program_name or "",
         "semester": letter.semester or "",
@@ -260,32 +338,66 @@ def build_context(
         "nomor_surat": letter.letter_no or "",
         "nomor_permohonan": letter.request_no or "",
         "tanggal_surat": tanggal,
-        "kota": settings.location,
+        "kota": branding.location if branding else settings.location,
         "tahun": tahun,
         "nama_penandatangan": signer.name if signer else "",
         "jabatan_penandatangan": signer.jabatan if signer else "",
         "nip_penandatangan": signer.nip if signer else "",
-        "blok_ttd": signature_block(letter, signer, settings),
+        "blok_ttd": signature_block_multi(letter, people, settings, 1, branding),
+        "blok_ttd_2": signature_block_multi(letter, people, settings, 2, branding),
+        "blok_ttd_3": signature_block_multi(letter, people, settings, 3, branding),
+        "blok_ttd_4": signature_block_multi(letter, people, settings, 4, branding),
     }
     return values
 
 
-def sample_context(settings: Settings) -> dict[str, str]:
+def sample_context(settings: Settings, branding=None) -> dict[str, str]:
     """Data contoh untuk pratinjau template di panel admin."""
     values = {key: sample for key, (_, sample) in KEYWORDS.items()}
-    values["kota"] = settings.location
-    values["lembaga"] = settings.institution
-    signer_name = "Nama Pejabat"
-    values["blok_ttd"] = (
+    values["kota"] = branding.location if branding else settings.location
+    values["lembaga"] = (
+        branding.institution if branding else settings.institution
+    )
+
+    single = (
         '<div class="ttd">'
-        f'<div class="ttd-place">{_html_value(settings.location)}, '
+        f'<div class="ttd-place">{_html_value(values["kota"])}, '
         "19 November 2026</div>"
         '<div class="ttd-title">Jabatan Pejabat</div>'
         '<div class="ttd-space"></div>'
-        f'<div class="ttd-name">{_html_value(signer_name)}</div>'
+        '<div class="ttd-name">Nama Pejabat</div>'
         '<div class="ttd-nip">NIP. 000000000</div>'
         "</div>"
     )
+    values["blok_ttd"] = single
+
+    cell = (
+        '<div class="ttd-col">'
+        '<div class="ttd-title">Jabatan Pejabat</div>'
+        '<div class="ttd-space"></div>'
+        '<div class="ttd-name">Nama Pejabat</div>'
+        '<div class="ttd-nip">NIP. 000000000</div>'
+        "</div>"
+    )
+    layouts = {
+        2: [f'<div class="ttd-row">{cell}{cell}</div>'],
+        3: [
+            f'<div class="ttd-row">{cell}{cell}</div>',
+            f'<div class="ttd-row ttd-row-single">{cell}</div>',
+        ],
+        4: [
+            f'<div class="ttd-row">{cell}{cell}</div>',
+            f'<div class="ttd-row">{cell}{cell}</div>',
+        ],
+    }
+    for count, key in ((2, "blok_ttd_2"), (3, "blok_ttd_3"), (4, "blok_ttd_4")):
+        values[key] = (
+            '<div class="ttd-multi">'
+            f'<div class="ttd-date">{_html_value(values["kota"])}, '
+            "19 November 2026</div>"
+            f'{"".join(layouts[count])}'
+            "</div>"
+        )
     return values
 
 
@@ -505,6 +617,23 @@ body {
 .ttd-space { height: 58px; }
 .ttd-name { font-weight: bold; text-decoration: underline; }
 .ttd-nip { font-size: 11pt; }
+.ttd-multi { margin-top: 26px; page-break-inside: avoid; }
+.ttd-date { text-align: right; margin-bottom: 4px; }
+.ttd-row {
+  display: flex;
+  gap: 18px;
+  page-break-inside: avoid;
+}
+.ttd-row + .ttd-row { margin-top: 22px; }
+.ttd-col { flex: 1 1 0; text-align: center; }
+.ttd-row-single .ttd-col {
+  flex: 0 0 calc(50% - 9px);
+  margin: 0 auto;
+}
+.ttd-col {
+  flex: 1 1 0;
+  text-align: center;
+}
 h1, h2, h3, h4 { font-size: @SIZEpt; margin: 0 0 8px; }
 .center { text-align: center; }
 .right { text-align: right; }
@@ -537,8 +666,12 @@ def render_letter_html(
     settings: Settings,
     logo_src: str | None = None,
     style: LetterStyle | None = None,
+    signers: list[SignerProfile] | None = None,
+    branding=None,
 ) -> tuple[str, list[str]]:
-    context = build_context(letter, signer, settings)
+    context = build_context(
+        letter, signer, settings, signers=signers, branding=branding
+    )
     body, unknown = render_text(template.body_html or "", context)
     meta_nomor = ""
     if letter.letter_no:

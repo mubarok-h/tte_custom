@@ -11,6 +11,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .branding import load_branding
 from .config import get_settings
 from .models import Document, EmailLog, EmailSettings, LetterRequest, utcnow
 from .security import decrypt_secret, encrypt_secret
@@ -104,7 +105,7 @@ def get_email_config(db: Session) -> SmtpConfig:
         on_approve=bool(row.on_approve),
         on_generate=bool(row.on_generate),
         on_signed=bool(row.on_signed),
-        institution=settings.institution,
+        institution=load_branding(db).institution,
         public_base_url=settings.public_base_url,
     )
 

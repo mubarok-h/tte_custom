@@ -1123,3 +1123,51 @@ def test_email_sent_after_single_signer(admin_client, monkeypatch):
 
     # Penanda tangan tunggal: cap memakai mode identitas (bukan anonim).
     assert captured_modes == [False]
+
+
+def test_signature_block_variants():
+    from datetime import datetime, timezone
+
+    from tte_core.letter_docs import build_context, render_text
+    from tte_core.models import LetterRequest, SignerProfile
+
+    settings = get_settings()
+    letter = LetterRequest(
+        request_no="REQ-1",
+        applicant_name="Uji",
+        nim="1",
+        email="a@b.c",
+        letter_type="Surat Uji",
+        status="approved",
+        submitted_at=datetime.now(timezone.utc),
+    )
+    people = [
+        SignerProfile(name="Pejabat Satu", jabatan="Rektor", nip="111"),
+        SignerProfile(name="Pejabat Dua", jabatan="Dekan", nip="222"),
+        SignerProfile(name="Pejabat Tiga", jabatan="Kaprodi", nip="333"),
+        SignerProfile(name="Pejabat Empat", jabatan="Sekretaris", nip="444"),
+    ]
+
+    context = build_context(letter, people[0], settings, signers=people)
+
+    single = context["blok_ttd"]
+    assert "ttd-row" not in single
+    assert "Pejabat Satu" in single
+
+    for count, key in ((2, "blok_ttd_2"), (3, "blok_ttd_3"), (4, "blok_ttd_4")):
+        block = context[key]
+        assert block.count('<div class="ttd-col') == count
+        assert "Pejabat Satu" in block
+        assert f"Pejabat {['Satu','Dua','Tiga','Empat'][count-1]}" in block
+        if count == 2:
+            assert block.count('class="ttd-row"') == 1
+        elif count == 3:
+            assert block.count('class="ttd-row"') == 1
+            assert block.count('class="ttd-row ttd-row-single"') == 1
+        else:
+            assert block.count('class="ttd-row"') == 2
+
+    rendered, unknown = render_text("[blok_ttd] / [blok_ttd_2] / [blok_ttd_4]", context)
+    assert unknown == []
+    assert rendered.count("ttd-row") == 3  # 2 penanda (1 baris) + 4 penanda (2 baris)
+    assert "ttd-col" in rendered
