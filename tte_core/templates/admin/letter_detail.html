@@ -27,7 +27,19 @@
       <div class="card-body">
         <dl class="row doc-facts mb-0">
           <dt class="col-sm-3">Nama</dt><dd class="col-sm-9">{{ letter.applicant_name }}</dd>
+          <dt class="col-sm-3">Pemohon</dt>
+          <dd class="col-sm-9">
+            <span class="badge bg-label-{{ 'info' if letter.applicant_type == 'dosen' else 'secondary' }}">
+              {{ 'Dosen' if letter.applicant_type == 'dosen' else 'Mahasiswa' }}
+            </span>
+          </dd>
+          {% if letter.applicant_type == 'dosen' %}
+          <dt class="col-sm-3">NIDN/NIP</dt><dd class="col-sm-9 mono">{{ letter.nidn or letter.nim }}</dd>
+          <dt class="col-sm-3">Jabatan</dt><dd class="col-sm-9">{{ letter.jabatan or '—' }}</dd>
+          <dt class="col-sm-3">Status Kepegawaian</dt><dd class="col-sm-9">{{ letter.employment_status or '—' }}</dd>
+          {% else %}
           <dt class="col-sm-3">NIM</dt><dd class="col-sm-9 mono">{{ letter.nim }}</dd>
+          {% endif %}
           <dt class="col-sm-3">Email</dt><dd class="col-sm-9">{{ letter.email }}</dd>
           <dt class="col-sm-3">WhatsApp</dt><dd class="col-sm-9">{{ letter.phone or '—' }}</dd>
           <dt class="col-sm-3">Tempat / Tgl Lahir</dt>

@@ -31,8 +31,18 @@
     </div>
     {% endif %}
 
+    <div class="segmented" role="group" aria-label="Jenis pemohon" style="margin-bottom:18px">
+      <a class="{{ 'active' if audience != 'dosen' else '' }}" href="/permohonan"{% if audience != 'dosen' %} aria-current="page"{% endif %}>
+        <i class="bx bx-user"></i>Mahasiswa
+      </a>
+      <a class="{{ 'active' if audience == 'dosen' else '' }}" href="/permohonan?sebagai=dosen"{% if audience == 'dosen' %} aria-current="page"{% endif %}>
+        <i class="bx bx-briefcase"></i>Dosen
+      </a>
+    </div>
+
     <form method="post" action="/permohonan">
       <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="applicant_type" value="{{ audience }}">
 
       <div class="form-section">
         <div class="form-section-head">
@@ -42,12 +52,20 @@
         <div class="form-grid">
           <div class="field">
             <label for="applicant_name">Nama Lengkap</label>
-            <input id="applicant_name" name="applicant_name" type="text" required value="{{ form.get('applicant_name', '') }}" placeholder="Nama sesuai KTM">
+            <input id="applicant_name" name="applicant_name" type="text" required value="{{ form.get('applicant_name', '') }}"
+                   placeholder="{{ 'Nama sesuai KTM' if audience != 'dosen' else 'Nama lengkap dengan gelar' }}">
           </div>
+          {% if audience == 'dosen' %}
+          <div class="field">
+            <label for="nidn">NIDN / NIP</label>
+            <input id="nidn" name="nidn" type="text" required value="{{ form.get('nidn', '') }}" placeholder="Nomor Induk Dosen Nasional / NIP">
+          </div>
+          {% else %}
           <div class="field">
             <label for="nim">NIM</label>
             <input id="nim" name="nim" type="text" required value="{{ form.get('nim', '') }}" placeholder="Nomor Induk Mahasiswa">
           </div>
+          {% endif %}
           <div class="field">
             <label for="birth_place">Tempat Lahir</label>
             <input id="birth_place" name="birth_place" type="text" value="{{ form.get('birth_place', '') }}" placeholder="Contoh: Cirebon">
@@ -98,10 +116,26 @@
               <option value="">— pilih prodi —</option>
             </select>
           </div>
+          {% if audience == 'dosen' %}
+          <div class="field">
+            <label for="jabatan">Jabatan Akademik / Fungsional</label>
+            <input id="jabatan" name="jabatan" type="text" value="{{ form.get('jabatan', '') }}" placeholder="Contoh: Lektor / Asisten Ahli">
+          </div>
+          <div class="field">
+            <label for="employment_status">Status Kepegawaian</label>
+            <select id="employment_status" name="employment_status">
+              <option value="">— pilih status —</option>
+              {% for item in ('Dosen Tetap', 'Dosen Tidak Tetap', 'Dosen Luar Biasa', 'Tenaga Kependidikan') %}
+              <option value="{{ item }}" {{ 'selected' if form.get('employment_status') == item else '' }}>{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% else %}
           <div class="field">
             <label for="semester">Semester</label>
             <input id="semester" name="semester" type="text" value="{{ form.get('semester', '') }}" placeholder="Contoh: 4">
           </div>
+          {% endif %}
           <div class="field">
             <label for="academic_year">Tahun Akademik</label>
             <select id="academic_year" name="academic_year">

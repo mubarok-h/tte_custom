@@ -357,6 +357,21 @@ Alur publik:
 - `/permohonan/status?q=<NIM atau nomor permohonan>` — lacak status dan riwayat.
 - `/permohonan/validasi?no=<nomor surat>` — validasi keaslian nomor surat.
 
+### Permohonan untuk dosen
+
+Form `/permohonan` memiliki dua tab: **Mahasiswa** dan **Dosen**
+(`/permohonan?sebagai=dosen`). Pada tab dosen, identitas memakai
+**NIDN/NIP**, jabatan akademik, dan status kepegawaian; semester tidak
+diminta. Jenis surat difilter berdasarkan audiens format:
+
+- **Mahasiswa** — format aktif dengan audiens mahasiswa/keduanya
+- **Dosen** — format aktif dengan audiens dosen/keduanya
+
+Tiga format dosen dibuat otomatis: Surat Keterangan Aktif Mengajar, Surat Tugas
+Dosen, dan Surat Pengantar Penelitian Dosen. Audiens format diatur pada editor
+format (Mahasiswa / Dosen / Keduanya). Permohonan dosen tetap memakai alur
+verifikasi, TTE, email, dan pembatasan data per fakultas/prodi yang sama.
+
 Alur admin:
 
 - `/admin/letters` — antrean dan filter permohonan.

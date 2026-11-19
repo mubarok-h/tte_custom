@@ -282,6 +282,25 @@
     .btn.secondary { background: #fff; color: #334155; border-color: var(--line); }
     .btn.secondary:hover { background: #f8fafc; border-color: #cbd5e1; color: var(--ink); }
 
+    .segmented {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px; background: #f1f5f9; border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+    .segmented a {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 18px; border-radius: 999px;
+      font-size: .83rem; font-weight: 700; color: #475569;
+      text-decoration: none;
+      transition: background .15s ease, color .15s ease;
+    }
+    .segmented a:hover { color: var(--ink); background: #e8edf4; }
+    .segmented a.active {
+      background: var(--brand); color: #fff;
+      box-shadow: 0 6px 14px -8px rgba(238, 74, 98, .9);
+    }
+    .segmented a.active:hover { background: var(--brand); color: #fff; }
+
     .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 26px; }
 
     .flash {

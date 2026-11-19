@@ -92,7 +92,12 @@
           </td>
           <td>
             <div class="fw-semibold">{{ letter.applicant_name }}</div>
-            <div class="small text-muted">NIM {{ letter.nim }}</div>
+            <div class="small text-muted">
+              {{ 'NIDN ' ~ (letter.nidn or letter.nim) if letter.applicant_type == 'dosen' else 'NIM ' ~ letter.nim }}
+            </div>
+            <span class="badge bg-label-{{ 'info' if letter.applicant_type == 'dosen' else 'secondary' }}">
+              {{ 'Dosen' if letter.applicant_type == 'dosen' else 'Mahasiswa' }}
+            </span>
           </td>
           <td class="small">{{ letter.letter_type }}</td>
           <td class="small">{{ letter.program_name or '—' }}</td>

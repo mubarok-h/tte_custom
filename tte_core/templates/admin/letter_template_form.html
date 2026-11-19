@@ -33,6 +33,16 @@
             <div class="form-text">Nama ini yang muncul di dropdown form permohonan publik.</div>
           </div>
           <div class="mb-3">
+            <label class="form-label" for="audience">Diperuntukkan bagi</label>
+            <select id="audience" name="audience" class="form-select">
+              {% set aud = (editing.audience or 'mahasiswa') if editing else 'mahasiswa' %}
+              <option value="mahasiswa" {{ 'selected' if aud == 'mahasiswa' else '' }}>Mahasiswa</option>
+              <option value="dosen" {{ 'selected' if aud == 'dosen' else '' }}>Dosen</option>
+              <option value="keduanya" {{ 'selected' if aud == 'keduanya' else '' }}>Mahasiswa &amp; Dosen</option>
+            </select>
+            <div class="form-text">Menentukan di tab mana format ini muncul pada form permohonan.</div>
+          </div>
+          <div class="mb-3">
             <label class="form-label" for="name">Nama format</label>
             <input id="name" name="name" class="form-control" required
                    value="{{ editing.name if editing else '' }}"

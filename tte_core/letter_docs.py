@@ -60,6 +60,14 @@ KEYWORD_GROUPS: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
         ),
     ),
     (
+        "Data dosen",
+        (
+            ("nidn", "NIDN/NIP dosen", "0123456789"),
+            ("jabatan_dosen", "Jabatan akademik/fungsional", "Lektor"),
+            ("status_kepegawaian", "Status kepegawaian", "Dosen Tetap"),
+        ),
+    ),
+    (
         "Isi permohonan",
         (
             ("jenis_surat", "Jenis surat", "Surat Keterangan Aktif Kuliah"),
@@ -232,6 +240,9 @@ def build_context(
     values = {
         "nama": letter.applicant_name or "",
         "nim": letter.nim or "",
+        "nidn": letter.nidn or "",
+        "jabatan_dosen": letter.jabatan or "",
+        "status_kepegawaian": letter.employment_status or "",
         "tempat_lahir": letter.birth_place or "",
         "tanggal_lahir": _format_tanggal(letter.birth_date),
         "email": letter.email or "",
@@ -599,9 +610,10 @@ def render_head_preview(
     )
 
 
-DEFAULT_TEMPLATES: tuple[tuple[str, str], ...] = (
+DEFAULT_TEMPLATES: tuple[tuple[str, str, str], ...] = (
     (
         "Surat Keterangan Aktif Kuliah",
+        "mahasiswa",
         """
 <p>Yang bertanda tangan di bawah ini, [Jabatan_Penandatangan] [Lembaga], dengan ini menerangkan bahwa:</p>
 <table class="data">
@@ -621,6 +633,7 @@ DEFAULT_TEMPLATES: tuple[tuple[str, str], ...] = (
     ),
     (
         "Surat Pengantar Penelitian",
+        "mahasiswa",
         """
 <p>Yang bertanda tangan di bawah ini, [Jabatan_Penandatangan] [Lembaga], dengan ini menerangkan bahwa:</p>
 <table class="data">
@@ -637,6 +650,7 @@ DEFAULT_TEMPLATES: tuple[tuple[str, str], ...] = (
     ),
     (
         "Surat Keterangan Lulus",
+        "mahasiswa",
         """
 <p>Yang bertanda tangan di bawah ini, [Jabatan_Penandatangan] [Lembaga], menerangkan bahwa:</p>
 <table class="data">
@@ -654,6 +668,7 @@ DEFAULT_TEMPLATES: tuple[tuple[str, str], ...] = (
     ),
     (
         "Surat Rekomendasi",
+        "mahasiswa",
         """
 <p>Yang bertanda tangan di bawah ini, [Jabatan_Penandatangan] [Lembaga], dengan ini memberikan rekomendasi kepada:</p>
 <table class="data">
@@ -670,6 +685,7 @@ DEFAULT_TEMPLATES: tuple[tuple[str, str], ...] = (
     ),
     (
         "Surat Keterangan Lainnya",
+        "mahasiswa",
         """
 <p>Yang bertanda tangan di bawah ini, [Jabatan_Penandatangan] [Lembaga], dengan ini menerangkan bahwa:</p>
 <table class="data">
@@ -680,6 +696,59 @@ DEFAULT_TEMPLATES: tuple[tuple[str, str], ...] = (
 </table>
 <p>[Keperluan]</p>
 <p>Demikian surat keterangan ini dibuat dengan sebenarnya untuk dapat dipergunakan sebagaimana mestinya.</p>
+[blok_ttd]
+""".strip(),
+    ),
+    (
+        "Surat Keterangan Aktif Mengajar",
+        "dosen",
+        """
+<p>Yang bertanda tangan di bawah ini, [Jabatan_Penandatangan] [Lembaga], dengan ini menerangkan bahwa:</p>
+<table class="data">
+  <tr><td>Nama</td><td>:</td><td><strong>[Nama]</strong></td></tr>
+  <tr><td>NIDN/NIP</td><td>:</td><td>[NIDN]</td></tr>
+  <tr><td>Jabatan</td><td>:</td><td>[Jabatan_Dosen]</td></tr>
+  <tr><td>Status Kepegawaian</td><td>:</td><td>[Status_Kepegawaian]</td></tr>
+  <tr><td>Program Studi</td><td>:</td><td>[Prodi]</td></tr>
+  <tr><td>Fakultas</td><td>:</td><td>[Fakultas]</td></tr>
+</table>
+<p>adalah dosen tetap/pada [Prodi], [Fakultas], [Lembaga] dan aktif melaksanakan tugas pendidikan, penelitian, serta pengabdian kepada masyarakat pada tahun akademik [Tahun_Akademik].</p>
+<p>Surat keterangan ini dibuat untuk keperluan [Keperluan].</p>
+<p>Demikian surat keterangan ini dibuat dengan sebenarnya untuk dipergunakan sebagaimana mestinya.</p>
+[blok_ttd]
+""".strip(),
+    ),
+    (
+        "Surat Tugas Dosen",
+        "dosen",
+        """
+<p>Yang bertanda tangan di bawah ini, [Jabatan_Penandatangan] [Lembaga], dengan ini menugaskan:</p>
+<table class="data">
+  <tr><td>Nama</td><td>:</td><td><strong>[Nama]</strong></td></tr>
+  <tr><td>NIDN/NIP</td><td>:</td><td>[NIDN]</td></tr>
+  <tr><td>Jabatan</td><td>:</td><td>[Jabatan_Dosen]</td></tr>
+  <tr><td>Program Studi</td><td>:</td><td>[Prodi]</td></tr>
+  <tr><td>Fakultas</td><td>:</td><td>[Fakultas]</td></tr>
+</table>
+<p>untuk melaksanakan tugas [Keperluan] di [Tujuan].</p>
+<p>Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab dan dipergunakan sebagaimana mestinya.</p>
+[blok_ttd]
+""".strip(),
+    ),
+    (
+        "Surat Pengantar Penelitian Dosen",
+        "dosen",
+        """
+<p>Yang bertanda tangan di bawah ini, [Jabatan_Penandatangan] [Lembaga], menerangkan bahwa:</p>
+<table class="data">
+  <tr><td>Nama</td><td>:</td><td><strong>[Nama]</strong></td></tr>
+  <tr><td>NIDN/NIP</td><td>:</td><td>[NIDN]</td></tr>
+  <tr><td>Program Studi</td><td>:</td><td>[Prodi]</td></tr>
+  <tr><td>Fakultas</td><td>:</td><td>[Fakultas]</td></tr>
+</table>
+<p>adalah dosen [Lembaga] yang akan melaksanakan penelitian dengan judul <strong>&ldquo;[Judul_Penelitian]&rdquo;</strong>.</p>
+<p>Sehubungan dengan hal tersebut, kami memohon kesediaan [Tujuan] untuk memberikan izin dan data yang diperlukan.</p>
+<p>Demikian surat pengantar ini dibuat untuk dipergunakan sebagaimana mestinya.</p>
 [blok_ttd]
 """.strip(),
     ),
@@ -714,7 +783,7 @@ def seed_defaults(db: Session, settings: Settings) -> None:
     existing = {
         row for row in db.execute(select(LetterTemplate.letter_type)).scalars()
     }
-    for letter_type, body in DEFAULT_TEMPLATES:
+    for letter_type, audience, body in DEFAULT_TEMPLATES:
         if letter_type in existing:
             continue
         db.add(
@@ -722,6 +791,7 @@ def seed_defaults(db: Session, settings: Settings) -> None:
                 letter_type=letter_type,
                 name=letter_type,
                 body_html=body,
+                audience=audience,
                 is_active=True,
                 created_by="sistem",
             )

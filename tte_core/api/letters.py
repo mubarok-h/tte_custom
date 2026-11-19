@@ -158,9 +158,17 @@ def _active_templates(db: Session) -> list[LetterTemplate]:
     )
 
 
-def _active_letter_types(db: Session) -> list[str]:
-    names = [row.letter_type for row in _active_templates(db)]
-    return names or list(LETTER_TYPES)
+def _templates_for(db: Session, audience: str) -> list[LetterTemplate]:
+    return [
+        row
+        for row in _active_templates(db)
+        if (row.audience or "mahasiswa") in (audience, "keduanya")
+    ]
+
+
+def _active_letter_types(db: Session, audience: str = "mahasiswa") -> list[str]:
+    names = [row.letter_type for row in _templates_for(db, audience)]
+    return names or (list(LETTER_TYPES) if audience == "mahasiswa" else [])
 
 
 def _form_context(
@@ -169,6 +177,7 @@ def _form_context(
     *,
     form: dict | None = None,
     error: str | None = None,
+    audience: str = "mahasiswa",
 ) -> dict:
     settings = get_settings()
     master = _master_data(db)
@@ -178,7 +187,8 @@ def _form_context(
         "csrf": csrf_token(settings),
         "master_data": master,
         "master_json": master,
-        "letter_types": _active_letter_types(db),
+        "audience": audience,
+        "letter_types": _active_letter_types(db, audience),
         "academic_years": ACADEMIC_YEARS,
         "form": form or {},
         "error": error,
@@ -190,18 +200,24 @@ def _form_context(
 @router.get("/permohonan", response_class=HTMLResponse)
 def request_form(
     request: Request,
+    sebagai: str = Query(default="mahasiswa"),
     db: Session = Depends(get_db),
 ):
+    audience = "dosen" if sebagai == "dosen" else "mahasiswa"
     return templates.TemplateResponse(
-        request, "permohonan.html", _form_context(request, db)
+        request, "permohonan.html", _form_context(request, db, audience=audience)
     )
 
 
 @router.post("/permohonan", response_class=HTMLResponse)
 def request_submit(
     request: Request,
+    applicant_type: str = Form(default="mahasiswa"),
     applicant_name: str = Form(default=""),
     nim: str = Form(default=""),
+    nidn: str = Form(default=""),
+    jabatan: str = Form(default=""),
+    employment_status: str = Form(default=""),
     birth_place: str = Form(default=""),
     birth_date: str = Form(default=""),
     email: str = Form(default=""),
@@ -219,8 +235,13 @@ def request_submit(
     db: Session = Depends(get_db),
     _csrf: None = Depends(require_csrf),
 ):
+    audience = "dosen" if applicant_type == "dosen" else "mahasiswa"
     form = {
+        "applicant_type": audience,
         "applicant_name": applicant_name,
+        "nidn": nidn,
+        "jabatan": jabatan,
+        "employment_status": employment_status,
         "nim": nim,
         "birth_place": birth_place,
         "birth_date": birth_date,
@@ -240,8 +261,9 @@ def request_submit(
 
     applicant_name = applicant_name.strip()
     nim = nim.strip()
+    nidn = nidn.strip()
     email = email.strip()
-    if not applicant_name or not nim or not email:
+    if not applicant_name or not email:
         return templates.TemplateResponse(
             request,
             "permohonan.html",
@@ -249,7 +271,34 @@ def request_submit(
                 request,
                 db,
                 form=form,
-                error="Nama lengkap, NIM, dan email wajib diisi.",
+                audience=audience,
+                error="Nama lengkap dan email wajib diisi.",
+            ),
+            status_code=400,
+        )
+    if audience == "mahasiswa" and not nim:
+        return templates.TemplateResponse(
+            request,
+            "permohonan.html",
+            _form_context(
+                request,
+                db,
+                form=form,
+                audience=audience,
+                error="NIM wajib diisi.",
+            ),
+            status_code=400,
+        )
+    if audience == "dosen" and not nidn:
+        return templates.TemplateResponse(
+            request,
+            "permohonan.html",
+            _form_context(
+                request,
+                db,
+                form=form,
+                audience=audience,
+                error="NIDN/NIP wajib diisi.",
             ),
             status_code=400,
         )
@@ -259,12 +308,19 @@ def request_submit(
             LetterTemplate.is_active.is_(True),
         )
     ).scalar_one_or_none()
-    if template is None:
+    if template is None or (template.audience or "mahasiswa") not in (
+        audience,
+        "keduanya",
+    ):
         return templates.TemplateResponse(
             request,
             "permohonan.html",
             _form_context(
-                request, db, form=form, error="Pilih jenis surat yang valid."
+                request,
+                db,
+                form=form,
+                audience=audience,
+                error="Pilih jenis surat yang valid.",
             ),
             status_code=400,
         )
@@ -280,6 +336,7 @@ def request_submit(
                 request,
                 db,
                 form=form,
+                audience=audience,
                 error="Lembaga, fakultas, dan program studi wajib dipilih.",
             ),
             status_code=400,
@@ -295,6 +352,7 @@ def request_submit(
                 request,
                 db,
                 form=form,
+                audience=audience,
                 error="Kombinasi lembaga, fakultas, dan prodi tidak cocok.",
             ),
             status_code=400,
@@ -309,8 +367,12 @@ def request_submit(
 
     letter = LetterRequest(
         request_no=_new_request_no(db),
+        applicant_type=audience,
         applicant_name=applicant_name,
-        nim=nim,
+        nim=nim or nidn,
+        nidn=nidn or None,
+        jabatan=jabatan.strip() or None,
+        employment_status=employment_status.strip() or None,
         birth_place=birth_place.strip() or None,
         birth_date=birth,
         email=email,
@@ -341,6 +403,7 @@ def request_submit(
             "letter_id": letter.id,
             "request_no": letter.request_no,
             "nim": letter.nim,
+            "applicant_type": letter.applicant_type,
             "letter_type": letter.letter_type,
         },
     )

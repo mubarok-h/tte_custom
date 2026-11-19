@@ -2396,6 +2396,7 @@ def letter_template_save(
     request: Request,
     letter_type: str = Form(default=""),
     name: str = Form(default=""),
+    audience: str = Form(default="mahasiswa"),
     body_html: str = Form(default=""),
     signer_id: str = Form(default=""),
     drive_folder_ref: str = Form(default=""),
@@ -2440,6 +2441,9 @@ def letter_template_save(
 
     template.letter_type = letter_type
     template.name = name
+    template.audience = (
+        audience if audience in ("mahasiswa", "dosen", "keduanya") else "mahasiswa"
+    )
     template.body_html = body_html
     template.signer_id = signer.id if signer else None
     folder = db.get(DriveFolder, drive_folder_ref) if drive_folder_ref else None

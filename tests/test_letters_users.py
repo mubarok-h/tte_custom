@@ -782,3 +782,98 @@ def test_user_management_restricted_for_non_admin(admin_client):
     row = db.execute(select(User).where(User.username == rekan)).scalar_one_or_none()
     assert row is not None and row.role == "operator_prodi"
     db.close()
+
+
+def test_dosen_letter_request_flow(admin_client):
+    _login(admin_client, get_settings().admin_username, get_settings().admin_token)
+    institution_id, faculty_id, program_id = _create_master(admin_client)
+
+    form = admin_client.get("/permohonan", params={"sebagai": "dosen"})
+    assert form.status_code == 200
+    assert "NIDN / NIP" in form.text
+    assert "Jabatan Akademik" in form.text
+    assert "Surat Keterangan Aktif Mengajar" in form.text
+    # Format mahasiswa tidak ditampilkan pada tab dosen.
+    assert "Surat Keterangan Lulus" not in form.text
+
+    nidn = f"NIDN-{uuid.uuid4().hex[:8]}"
+    submit = admin_client.post(
+        "/permohonan",
+        data={
+            "csrf": _csrf(),
+            "applicant_type": "dosen",
+            "applicant_name": "Dosen Uji",
+            "nidn": nidn,
+            "jabatan": "Lektor",
+            "employment_status": "Dosen Tetap",
+            "email": "dosen@example.test",
+            "institution_id": institution_id,
+            "faculty_id": faculty_id,
+            "program_id": program_id,
+            "academic_year": "2026/2027 Ganjil",
+            "letter_type": "Surat Keterangan Aktif Mengajar",
+            "purpose": "Keperluan administrasi",
+            "notes": "Uji alur dosen",
+        },
+        follow_redirects=False,
+    )
+    assert submit.status_code == 303, submit.text
+    request_no = re.search(r"REQ-[A-Z0-9-]+", submit.headers["location"]).group(0)
+
+    from sqlalchemy import select
+
+    from tte_core.db import get_session_factory
+    from tte_core.models import LetterRequest
+
+    db = get_session_factory()()
+    letter = db.execute(
+        select(LetterRequest).where(LetterRequest.request_no == request_no)
+    ).scalar_one()
+    assert letter.applicant_type == "dosen"
+    assert letter.nidn == nidn
+    assert letter.jabatan == "Lektor"
+    assert letter.employment_status == "Dosen Tetap"
+    letter_id = letter.id
+    db.close()
+
+    detail = admin_client.get(f"/admin/letters/{letter_id}")
+    assert detail.status_code == 200
+    assert "Dosen" in detail.text
+    assert nidn in detail.text
+    assert "Lektor" in detail.text
+
+    # NIDN wajib untuk dosen.
+    invalid = admin_client.post(
+        "/permohonan",
+        data={
+            "csrf": _csrf(),
+            "applicant_type": "dosen",
+            "applicant_name": "Tanpa NIDN",
+            "email": "x@example.test",
+            "institution_id": institution_id,
+            "faculty_id": faculty_id,
+            "program_id": program_id,
+            "letter_type": "Surat Keterangan Aktif Mengajar",
+        },
+        follow_redirects=False,
+    )
+    assert invalid.status_code == 400
+    assert "NIDN/NIP wajib diisi" in invalid.text
+
+    # Format dosen tidak bisa dipakai lewat jalur mahasiswa.
+    mismatch = admin_client.post(
+        "/permohonan",
+        data={
+            "csrf": _csrf(),
+            "applicant_type": "mahasiswa",
+            "applicant_name": "Mahasiswa Salah",
+            "nim": "20260001",
+            "email": "mhs@example.test",
+            "institution_id": institution_id,
+            "faculty_id": faculty_id,
+            "program_id": program_id,
+            "letter_type": "Surat Keterangan Aktif Mengajar",
+        },
+        follow_redirects=False,
+    )
+    assert mismatch.status_code == 400

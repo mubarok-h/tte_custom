@@ -87,6 +87,19 @@ def _ensure_letter_columns() -> None:
         )
     if "signer_id" not in columns:
         statements.append("ALTER TABLE letter_requests ADD COLUMN signer_id TEXT")
+    if "applicant_type" not in columns:
+        statements.append(
+            "ALTER TABLE letter_requests ADD COLUMN applicant_type VARCHAR(16)"
+            " DEFAULT 'mahasiswa'"
+        )
+    if "nidn" not in columns:
+        statements.append("ALTER TABLE letter_requests ADD COLUMN nidn VARCHAR(40)")
+    if "jabatan" not in columns:
+        statements.append("ALTER TABLE letter_requests ADD COLUMN jabatan TEXT")
+    if "employment_status" not in columns:
+        statements.append(
+            "ALTER TABLE letter_requests ADD COLUMN employment_status VARCHAR(32)"
+        )
     if not statements:
         return
     with engine.begin() as conn:
@@ -169,12 +182,21 @@ def _ensure_letter_template_columns() -> None:
     columns = {
         col["name"] for col in inspector.get_columns("letter_templates")
     }
-    if "drive_folder_ref" in columns:
+    statements = []
+    if "drive_folder_ref" not in columns:
+        statements.append(
+            "ALTER TABLE letter_templates ADD COLUMN drive_folder_ref TEXT"
+        )
+    if "audience" not in columns:
+        statements.append(
+            "ALTER TABLE letter_templates ADD COLUMN audience VARCHAR(16)"
+            " DEFAULT 'mahasiswa'"
+        )
+    if not statements:
         return
     with engine.begin() as conn:
-        conn.execute(
-            text("ALTER TABLE letter_templates ADD COLUMN drive_folder_ref TEXT")
-        )
+        for statement in statements:
+            conn.execute(text(statement))
 
 
 def _ensure_user_columns() -> None:

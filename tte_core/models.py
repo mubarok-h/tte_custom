@@ -271,8 +271,16 @@ class LetterRequest(Base):
     )
 
     # Identitas pemohon
+    applicant_type: Mapped[str] = mapped_column(
+        String(16), default="mahasiswa", index=True
+    )
     applicant_name: Mapped[str] = mapped_column(Text)
     nim: Mapped[str] = mapped_column(String(40), index=True)
+    nidn: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    jabatan: Mapped[str | None] = mapped_column(Text, nullable=True)
+    employment_status: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
     birth_place: Mapped[str | None] = mapped_column(Text, nullable=True)
     birth_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
     email: Mapped[str] = mapped_column(Text)
@@ -464,6 +472,7 @@ class LetterTemplate(Base):
     letter_type: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     name: Mapped[str] = mapped_column(Text)
     body_html: Mapped[str] = mapped_column(Text, default="")
+    audience: Mapped[str] = mapped_column(String(16), default="mahasiswa")
     signer_id: Mapped[str | None] = mapped_column(
         ForeignKey("signers.id"), nullable=True
     )
