@@ -6,9 +6,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# libpango*/libharfbuzz-subset0 = runtime WeasyPrint (render PDF surat);
+# fonts-* = tipografi surat (Liberation = metrik Times New Roman/Arial).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         opensc pcscd libpcsclite1 curl openssl ca-certificates \
+        libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 \
+        libcairo2 libgdk-pixbuf-2.0-0 shared-mime-info \
+        fonts-dejavu-core fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
