@@ -46,7 +46,7 @@ def ca_page(request: Request, _admin=Depends(require_admin)) -> HTMLResponse:
 
 
 @router.get("/ca/root.crt")
-def root_certificate(_admin=Depends(require_admin)) -> FileResponse:
+def root_certificate() -> FileResponse:
     path = get_settings().root_ca_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Root CA belum tersedia.")
@@ -58,7 +58,7 @@ def root_certificate(_admin=Depends(require_admin)) -> FileResponse:
 
 
 @router.get("/ca/intermediate.crt")
-def intermediate_certificate(_admin=Depends(require_admin)) -> FileResponse:
+def intermediate_certificate() -> FileResponse:
     path = get_settings().intermediate_ca_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Intermediate CA belum tersedia.")
@@ -70,7 +70,7 @@ def intermediate_certificate(_admin=Depends(require_admin)) -> FileResponse:
 
 
 @router.get("/crl/stit.crl")
-def crl(_admin=Depends(require_admin)) -> FileResponse:
+def crl() -> FileResponse:
     path = get_settings().crl_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="CRL belum tersedia.")
@@ -82,7 +82,7 @@ def crl(_admin=Depends(require_admin)) -> FileResponse:
 
 
 @router.get("/crl/root.crl")
-def root_crl(_admin=Depends(require_admin)) -> FileResponse:
+def root_crl() -> FileResponse:
     path = get_settings().root_crl_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Root CRL belum tersedia.")
