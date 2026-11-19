@@ -1,0 +1,190 @@
+{% extends "admin/base.html" %}
+{% block title %}Penyimpanan Drive{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Penyimpanan Google Drive</h4>
+    <p class="page-subtitle mb-0">Salinan dokumen PDF disimpan otomatis ke folder Google Drive.</p>
+  </div>
+  {% if drive_ready %}
+  <span class="badge bg-label-success">Aktif</span>
+  {% else %}
+  <span class="badge bg-label-warning">Belum aktif</span>
+  {% endif %}
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-xl-6">
+    <form method="post" action="/admin/storage" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+
+      <div class="card mb-4">
+        <div class="card-header"><h5 class="card-title mb-0">Pengaturan</h5></div>
+        <div class="card-body">
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="enabled" name="enabled" value="1"
+                   {{ 'checked' if drive.enabled else '' }}>
+            <label class="form-check-label" for="enabled">Aktifkan penyimpanan Google Drive</label>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="folder_id">Folder ID Google Drive</label>
+            <input id="folder_id" name="folder_id" class="form-control mono"
+                   value="{{ drive.folder_id }}" placeholder="1AbCdEfGhIjKlMnOpQrStUvWxYz">
+            <div class="form-text">
+              Ambil dari URL folder: <span class="mono">drive.google.com/drive/folders/&lt;ID&gt;</span>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="credentials">Kredensial service account (JSON)</label>
+            <input id="credentials" name="credentials" type="file" class="form-control"
+                   accept="application/json,.json">
+            <div class="form-text">
+              {% if has_credentials %}
+              Kredensial tersimpan{% if drive.account_email %} untuk <span class="mono">{{ drive.account_email }}</span>{% endif %}.
+              Unggah lagi hanya bila ingin menggantinya.
+              {% else %}
+              Belum ada kredensial. Unggah file JSON service account.
+              {% endif %}
+            </div>
+          </div>
+
+          <button class="btn btn-primary w-100" type="submit">
+            <i class="bx bx-save me-1"></i>Simpan pengaturan
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">Uji koneksi</h5></div>
+      <div class="card-body">
+        <p class="small text-muted">
+          Simpan pengaturan terlebih dahulu, lalu uji apakah folder dapat diakses
+          oleh service account.
+        </p>
+        <form method="post" action="/admin/storage/test">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn btn-outline-primary w-100" type="submit">
+            <i class="bx bx-link-check me-1"></i>Uji koneksi Drive
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">Folder per format surat</h5>
+        <span class="badge bg-label-primary">{{ folders|length }} folder</span>
+      </div>
+      <div class="card-body">
+        {% if folders %}
+        <div class="table-responsive mb-3">
+          <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>Nama</th><th>Folder ID</th><th class="text-end">Aksi</th></tr></thead>
+            <tbody>
+              {% for folder in folders %}
+              <tr>
+                <td>
+                  <div class="fw-semibold">{{ folder.name }}</div>
+                  {% if folder.is_default %}<span class="badge bg-label-success">Default</span>{% endif %}
+                </td>
+                <td class="mono small">{{ folder.folder_id }}</td>
+                <td class="text-end table-actions text-nowrap">
+                  {% if not folder.is_default %}
+                  <form method="post" action="/admin/storage/folders/{{ folder.id }}/default" class="inline-form">
+                    <input type="hidden" name="csrf" value="{{ csrf }}">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Default</button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="/admin/storage/folders/{{ folder.id }}/delete" class="inline-form"
+                        onsubmit="return confirm('Hapus folder {{ folder.name }}?')">
+                    <input type="hidden" name="csrf" value="{{ csrf }}">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Hapus</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty-state py-3"><i class="bx bx-folder"></i>Belum ada folder khusus.</div>
+        {% endif %}
+
+        <form method="post" action="/admin/storage/folders">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <div class="row g-2">
+            <div class="col-12">
+              <input name="name" class="form-control" placeholder="Nama folder, mis. Surat Keterangan" required>
+            </div>
+            <div class="col-12">
+              <input name="folder_id" class="form-control mono" placeholder="Folder ID Google Drive" required>
+            </div>
+            <div class="col-12 d-flex justify-content-between align-items-center">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="folder_default" name="is_default" value="1">
+                <label class="form-check-label" for="folder_default">Jadikan default</label>
+              </div>
+              <button class="btn btn-sm btn-primary" type="submit">
+                <i class="bx bx-plus me-1"></i>Tambah folder
+              </button>
+            </div>
+          </div>
+          <div class="form-text">
+            Format surat dapat memilih salah satu folder ini; jika kosong, dipakai
+            folder default.
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header"><h5 class="card-title mb-0">Status</h5></div>
+      <div class="card-body">
+        <dl class="row doc-facts mb-0">
+          <dt class="col-sm-4">Penyimpanan</dt>
+          <dd class="col-sm-8">{{ 'Google Drive + lokal' if drive.enabled else 'Lokal saja' }}</dd>
+          <dt class="col-sm-4">Folder ID</dt>
+          <dd class="col-sm-8 mono">{{ drive.folder_id or '—' }}</dd>
+          <dt class="col-sm-4">Akun layanan</dt>
+          <dd class="col-sm-8 mono">{{ drive.account_email or '—' }}</dd>
+          <dt class="col-sm-4">Kredensial</dt>
+          <dd class="col-sm-8">{{ 'Tersimpan (terenkripsi)' if has_credentials else 'Belum ada' }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">Cara menyiapkan</h5></div>
+      <div class="card-body small text-muted">
+        <ol class="ps-3 mb-0">
+          <li class="mb-2">
+            Buka <span class="mono">console.cloud.google.com</span>, buat project,
+            lalu aktifkan <strong>Google Drive API</strong>.
+          </li>
+          <li class="mb-2">
+            Buat <strong>Service Account</strong> di menu IAM &amp; Admin, lalu
+            buat kunci dalam format <strong>JSON</strong> dan unduh.
+          </li>
+          <li class="mb-2">
+            Buat folder di Google Drive, klik <strong>Share</strong>, dan tambahkan
+            email service account (<span class="mono">...iam.gserviceaccount.com</span>)
+            sebagai <strong>Editor</strong>.
+          </li>
+          <li class="mb-2">
+            Salin <strong>Folder ID</strong> dari URL folder, unggah JSON di atas,
+            lalu simpan.
+          </li>
+          <li>
+            Tekan <strong>Uji koneksi Drive</strong> untuk memastikan konfigurasi benar.
+          </li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

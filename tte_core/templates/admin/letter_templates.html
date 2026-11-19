@@ -1,0 +1,121 @@
+{% extends "admin/base.html" %}
+{% block title %}Format Surat{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Format Surat</h4>
+    <p class="page-subtitle">Format isi surat yang dipakai untuk membuat PDF dari permohonan.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-primary" href="/admin/letterhead">
+      <i class="bx bx-image-alt me-1"></i>Kop Surat
+    </a>
+    <a class="btn btn-primary" href="/admin/letter-templates/new">
+      <i class="bx bx-plus me-1"></i>Tambah format
+    </a>
+  </div>
+</div>
+
+<ul class="nav nav-pills gap-2 mb-4">
+  <li class="nav-item"><a class="nav-link {{ 'active' if active_tab == 'templates' else '' }}" href="/admin/letter-templates"><i class="bx bx-layout me-1"></i>Format</a></li>
+  <li class="nav-item"><a class="nav-link {{ 'active' if active_tab == 'head' else '' }}" href="/admin/letterhead"><i class="bx bx-image-alt me-1"></i>Kop Surat</a></li>
+  <li class="nav-item"><a class="nav-link {{ 'active' if active_tab == 'style' else '' }}" href="/admin/letter-style"><i class="bx bx-font me-1"></i>Tipografi</a></li>
+</ul>
+
+<div class="row g-4">
+  <div class="col-12 col-xl-8">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">Daftar format</h5>
+        <span class="badge bg-label-primary">{{ rows|length }} format</span>
+      </div>
+      {% if rows %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Jenis surat</th>
+              <th>Penanda tangan</th>
+              <th>Status</th>
+              <th class="text-end">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ row.letter_type }}</div>
+                <div class="small text-muted">{{ row.name }}</div>
+              </td>
+              <td class="small">
+                {% if row.signer_id and signer_map.get(row.signer_id) %}
+                  {{ signer_map[row.signer_id].name }}
+                  <div class="text-muted">{{ signer_map[row.signer_id].jabatan }}</div>
+                {% else %}
+                  <span class="text-muted">Dipilih saat generate</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.is_active %}
+                <span class="badge bg-label-success">Aktif</span>
+                {% else %}
+                <span class="badge bg-label-secondary">Nonaktif</span>
+                {% endif %}
+                <div class="small text-muted mt-1">{{ row.updated_at | tanggal }}</div>
+              </td>
+              <td class="text-end table-actions text-nowrap">
+                <a class="btn btn-sm btn-outline-primary" href="/admin/letter-templates/{{ row.id }}">Edit</a>
+                <form method="post" action="/admin/letter-templates/{{ row.id }}/toggle" class="inline-form">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">
+                    {{ 'Nonaktifkan' if row.is_active else 'Aktifkan' }}
+                  </button>
+                </form>
+                <form method="post" action="/admin/letter-templates/{{ row.id }}/delete" class="inline-form" onsubmit="return confirm('Hapus format {{ row.letter_type }}?')">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Hapus</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><i class="bx bx-layout"></i>Belum ada format surat.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-4">
+    <div class="card mb-4">
+      <div class="card-header"><h5 class="card-title mb-0">Kop surat aktif</h5></div>
+      <div class="card-body">
+        {% if letterhead %}
+        <div class="fw-semibold">{{ letterhead.name }}</div>
+        <div class="small text-muted">{{ letterhead.line1 or '—' }}</div>
+        <div class="small text-muted">{{ letterhead.line2 or '' }}</div>
+        <div class="small text-muted">{{ letterhead.line3 or '' }}</div>
+        <div class="small text-muted">{{ letterhead.line4 or '' }}</div>
+        <a class="btn btn-outline-primary w-100 mt-3" href="/admin/letterhead">Ubah kop surat</a>
+        {% else %}
+        <div class="empty-state py-3"><i class="bx bx-image-alt"></i>Kop surat belum diatur.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">Cara pakai</h5></div>
+      <div class="card-body small text-muted">
+        <p class="mb-2">Tulis isi surat dengan HTML, lalu sisipkan keyword dari data permohonan.</p>
+        <ul class="mb-0 ps-3">
+          <li><span class="mono">[NAMA]</span> — kapital semua</li>
+          <li><span class="mono">[nama]</span> — huruf kecil semua</li>
+          <li><span class="mono">[Nama]</span> — awal kata kapital</li>
+          <li><span class="mono">[blok_ttd]</span> — blok tanda tangan lengkap</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

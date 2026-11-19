@@ -12,7 +12,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <title>{% block title %}Admin{% endblock %} — {{ institution }}</title>
-  <link rel="icon" type="image/x-icon" href="/static/sneat/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/brand/stit-favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/brand/stit-favicon-192.png">
+  <link rel="apple-touch-icon" href="/static/brand/stit-favicon-192.png">
 
   <link rel="stylesheet" href="/static/sneat/css/fonts.css">
   <link rel="stylesheet" href="/static/sneat/css/boxicons.css">
@@ -103,6 +105,14 @@
             <div>Penanda Tangan</div>
           </a>
         </li>
+        {% if current_user and current_user.role == 'admin' %}
+        <li class="menu-item {{ 'active' if active == 'templates' else '' }}">
+          <a href="/admin/letter-templates" class="menu-link">
+            <i class="menu-icon tf-icons bx bx-layout"></i>
+            <div>Format Surat</div>
+          </a>
+        </li>
+        {% endif %}
 
         <li class="menu-header small text-uppercase mt-3">
           <span class="menu-header-text">Sistem</span>
@@ -112,6 +122,18 @@
           <a href="/admin/users" class="menu-link">
             <i class="menu-icon tf-icons bx bx-group"></i>
             <div>Pengguna</div>
+          </a>
+        </li>
+        <li class="menu-item {{ 'active' if active == 'email' else '' }}">
+          <a href="/admin/email" class="menu-link">
+            <i class="menu-icon tf-icons bx bx-envelope-open"></i>
+            <div>Email</div>
+          </a>
+        </li>
+        <li class="menu-item {{ 'active' if active == 'storage' else '' }}">
+          <a href="/admin/storage" class="menu-link">
+            <i class="menu-icon tf-icons bx bx-cloud-upload"></i>
+            <div>Penyimpanan</div>
           </a>
         </li>
         {% endif %}

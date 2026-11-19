@@ -13,17 +13,21 @@ from pathlib import Path
 
 from pypdf import PdfReader
 from pyhanko.pdf_utils.reader import PdfFileReader
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from . import drive
 from .api.schemas import SignResult
 from .audit import append_event
 from .config import Settings, get_settings
+from .drive import DriveError
 from .models import (
     Document,
+    EmailLog,
     LetterRequest,
     SignatureRecord,
     SignerProfile,
+    StorageSettings,
     SignRequest,
     VerificationToken,
     utcnow,
@@ -32,6 +36,47 @@ from .pki import PkiError, load_signer_for_profile
 from .signing import SigningError, sign_pdf_bytes
 from .storage import original_path, signed_path, write_bytes
 from .tokens import make_token, new_short_id, sha256_hex
+
+
+def _drive_upload(
+    db: Session,
+    doc: Document,
+    kind: str,
+    path: Path,
+    name: str,
+    folder_id: str | None = None,
+) -> None:
+    """Unggah berkas ke Google Drive bila diaktifkan (best-effort)."""
+    if db.execute(select(StorageSettings).limit(1)).scalar_one_or_none() is None:
+        return
+    config = drive.get_drive_config(db)
+    if not config.ready:
+        return
+    target_folder = (
+        folder_id or doc.drive_folder_id or drive.default_folder_id(db)
+    )
+    try:
+        file_id = drive.upload_bytes(
+            config,
+            name=name,
+            data=path.read_bytes(),
+            mime="application/pdf",
+            folder_id=target_folder,
+        )
+    except DriveError as exc:
+        append_event(
+            db,
+            "drive.upload_failed",
+            {"document_id": doc.id, "kind": kind, "error": str(exc)[:300]},
+        )
+        return
+    if not file_id:
+        return
+    doc.drive_folder_id = target_folder
+    if kind == "signed":
+        doc.drive_signed_id = file_id
+    else:
+        doc.drive_original_id = file_id
 
 
 class OperationError(Exception):
@@ -54,6 +99,7 @@ def upload_document(
     data: bytes,
     filename: str,
     settings: Settings | None = None,
+    drive_folder_id: str | None = None,
 ) -> Document:
     settings = settings or get_settings()
     if len(data) == 0:
@@ -85,6 +131,9 @@ def upload_document(
     path = original_path(settings, doc.id)
     write_bytes(path, data)
     doc.original_path = str(path)
+    _drive_upload(
+        db, doc, "original", path, doc.filename, folder_id=drive_folder_id
+    )
 
     token = make_token(doc.id, settings.token_secret)
     db.add(
@@ -224,11 +273,11 @@ def sign_request(
     if doc.status not in ("uploaded", "signed"):
         raise OperationError("Status dokumen tidak valid.", 409)
 
-    source_path = (
-        Path(doc.signed_path)
-        if doc.signed_path and Path(doc.signed_path).exists()
-        else Path(doc.original_path)
-    )
+    source_path = None
+    if doc.signed_path:
+        source_path = drive.ensure_document_file(db, doc, "signed")
+    if source_path is None:
+        source_path = drive.ensure_document_file(db, doc, "original")
     if not source_path.exists():
         raise OperationError("Berkas sumber tidak ditemukan.", 404)
 
@@ -236,6 +285,17 @@ def sign_request(
     token = make_token(doc.id, settings.token_secret)
     verify_url = verify_url_for(doc.short_id, token)
     field_index = len(doc.signatures)
+
+    # Cap anonim hanya dipakai bila memang ada lebih dari satu penanda tangan.
+    active_requests = db.execute(
+        select(func.count())
+        .select_from(SignRequest)
+        .where(
+            SignRequest.document_id == doc.id,
+            SignRequest.status != "cancelled",
+        )
+    ).scalar_one()
+    multi_mode = settings.enable_multisign and active_requests > 1
 
     letter = db.execute(
         select(LetterRequest)
@@ -267,7 +327,7 @@ def sign_request(
             institution=institution,
             faculty=faculty,
             program=program,
-            multi_mode=settings.enable_multisign,
+            multi_mode=multi_mode,
             signer_material=signer_material,
         )
     except SigningError as exc:
@@ -277,6 +337,14 @@ def sign_request(
 
     out_path = signed_path(settings, doc.id)
     write_bytes(out_path, signed_bytes)
+    _drive_upload(
+        db,
+        doc,
+        "signed",
+        out_path,
+        f"{Path(doc.filename).stem}-tte.pdf",
+        folder_id=doc.drive_folder_id,
+    )
 
     serial = None
     subject = None
@@ -338,3 +406,78 @@ def sign_request(
         download_url=f"/api/v1/documents/{doc.id}/download?t={token}",
         verify_url=verify_url,
     )
+
+
+def letter_signatures_complete(db: Session, document_id: str) -> bool:
+    """True bila semua penanda tangan sudah menandatangani dokumen."""
+    pending = db.execute(
+        select(func.count())
+        .select_from(SignRequest)
+        .where(
+            SignRequest.document_id == document_id,
+            SignRequest.status.in_(("pending", "consented")),
+        )
+    ).scalar_one()
+    if pending:
+        return False
+    signed = db.execute(
+        select(func.count())
+        .select_from(SignatureRecord)
+        .where(SignatureRecord.document_id == document_id)
+    ).scalar_one()
+    return signed > 0
+
+
+def finalize_letter_if_complete(
+    db: Session, document_id: str
+) -> LetterRequest | None:
+    """Tandai surat terbit dan kirim email setelah semua tanda tangan selesai.
+
+    Idempoten: aman dipanggil berulang kali. Email hanya dikirim sekali.
+    """
+    from .mailer import get_email_config, send_letter_email
+
+    letter = db.execute(
+        select(LetterRequest)
+        .where(LetterRequest.document_id == document_id)
+        .order_by(LetterRequest.submitted_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if letter is None or letter.status == "rejected":
+        return None
+    if not letter_signatures_complete(db, document_id):
+        return None
+
+    if letter.status != "signed":
+        letter.status = "signed"
+        letter.approved_at = letter.approved_at or utcnow()
+        append_event(
+            db,
+            "letter.signed",
+            {
+                "letter_id": letter.id,
+                "request_no": letter.request_no,
+                "document_id": document_id,
+            },
+        )
+        db.commit()
+
+    config = get_email_config(db)
+    if not config.on_signed:
+        return letter
+
+    already_sent = db.execute(
+        select(EmailLog.id)
+        .where(
+            EmailLog.letter_id == letter.id,
+            EmailLog.kind == "signed",
+            EmailLog.status == "sent",
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if already_sent is not None:
+        return letter
+
+    document = db.get(Document, document_id)
+    send_letter_email(db, letter, config, kind="signed", document=document)
+    return letter

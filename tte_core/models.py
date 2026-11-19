@@ -36,6 +36,9 @@ class Document(Base):
     final_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     original_path: Mapped[str] = mapped_column(Text)
     signed_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drive_original_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drive_signed_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drive_folder_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     filename: Mapped[str] = mapped_column(Text)
     size_bytes: Mapped[int] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(32), default="uploaded", index=True)
@@ -300,8 +303,160 @@ class LetterRequest(Base):
     verified_by: Mapped[str | None] = mapped_column(Text, nullable=True)
     approved_by: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Format surat yang dipakai & penanda tangan yang dicetak di isi surat
+    template_id: Mapped[str | None] = mapped_column(
+        ForeignKey("letter_templates.id"), nullable=True, index=True
+    )
+    signer_id: Mapped[str | None] = mapped_column(
+        ForeignKey("signers.id"), nullable=True
+    )
+
     document_id: Mapped[str | None] = mapped_column(
         ForeignKey("documents.id"), nullable=True, index=True
     )
 
     document: Mapped[Document | None] = relationship()
+
+
+class DriveFolder(Base):
+    """Folder Google Drive yang dapat dipakai per format surat."""
+
+    __tablename__ = "drive_folders"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(Text)
+    folder_id: Mapped[str] = mapped_column(Text)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class StorageSettings(Base):
+    """Pengaturan penyimpanan dokumen di Google Drive."""
+
+    __tablename__ = "storage_settings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    folder_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    credentials_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    account_email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mode: Mapped[str] = mapped_column(String(16), default="mirror")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class EmailSettings(Base):
+    """Konfigurasi SMTP yang dapat diubah dari panel admin."""
+
+    __tablename__ = "email_settings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    host: Mapped[str] = mapped_column(String(120), default="smtp.gmail.com")
+    port: Mapped[int] = mapped_column(Integer, default=587)
+    username: Mapped[str | None] = mapped_column(Text, nullable=True)
+    password_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    from_name: Mapped[str] = mapped_column(Text, default="STIT Buntet Pesantren")
+    from_email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    use_ssl: Mapped[bool] = mapped_column(Boolean, default=False)
+    timeout: Mapped[int] = mapped_column(Integer, default=20)
+    on_approve: Mapped[bool] = mapped_column(Boolean, default=True)
+    on_generate: Mapped[bool] = mapped_column(Boolean, default=False)
+    on_signed: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class EmailLog(Base):
+    """Catatan pengiriman email surat (tanpa menyimpan kata sandi)."""
+
+    __tablename__ = "email_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    letter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("letter_requests.id"), nullable=True, index=True
+    )
+    recipient: Mapped[str] = mapped_column(Text)
+    subject: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(32), default="approved")
+    status: Mapped[str] = mapped_column(String(16), default="sent", index=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    has_attachment: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class LetterHead(Base):
+    """Kop surat global yang dipakai seluruh format surat."""
+
+    __tablename__ = "letterheads"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(Text, default="Kop Surat Utama")
+    logo_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    line1: Mapped[str | None] = mapped_column(Text, nullable=True)
+    line2: Mapped[str | None] = mapped_column(Text, nullable=True)
+    line3: Mapped[str | None] = mapped_column(Text, nullable=True)
+    line4: Mapped[str | None] = mapped_column(Text, nullable=True)
+    line5: Mapped[str | None] = mapped_column(Text, nullable=True)
+    accent_color: Mapped[str] = mapped_column(String(16), default="#0d6b3f")
+    html_override: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class LetterStyle(Base):
+    """Pengaturan tipografi surat (satu baris global)."""
+
+    __tablename__ = "letter_styles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    body_font: Mapped[str] = mapped_column(
+        String(80), default="Times New Roman"
+    )
+    body_size_pt: Mapped[float] = mapped_column(default=12.0)
+    line_height: Mapped[float] = mapped_column(default=1.55)
+    paragraph_gap_pt: Mapped[float] = mapped_column(default=10.0)
+    margin_top_cm: Mapped[float] = mapped_column(default=2.0)
+    margin_bottom_cm: Mapped[float] = mapped_column(default=2.2)
+    margin_left_cm: Mapped[float] = mapped_column(default=2.6)
+    margin_right_cm: Mapped[float] = mapped_column(default=2.4)
+    kop_gap_mm: Mapped[float] = mapped_column(default=4.0)
+    kop_line1_size_pt: Mapped[float] = mapped_column(default=11.5)
+    kop_main_size_pt: Mapped[float] = mapped_column(default=14.0)
+    kop_address_size_pt: Mapped[float] = mapped_column(default=8.5)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class LetterTemplate(Base):
+    """Format surat yang bisa diedit admin, satu baris per jenis surat."""
+
+    __tablename__ = "letter_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    letter_type: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    name: Mapped[str] = mapped_column(Text)
+    body_html: Mapped[str] = mapped_column(Text, default="")
+    signer_id: Mapped[str | None] = mapped_column(
+        ForeignKey("signers.id"), nullable=True
+    )
+    drive_folder_ref: Mapped[str | None] = mapped_column(
+        ForeignKey("drive_folders.id"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )

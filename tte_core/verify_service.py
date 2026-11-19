@@ -85,7 +85,10 @@ def verify_document(
     if record is not None:
         record.hit_count += 1
 
-    if not doc.signed_path or not Path(doc.signed_path).exists():
+    from .drive import ensure_document_file
+
+    signed_file = ensure_document_file(db, doc, "signed")
+    if signed_file is None or not signed_file.exists():
         return {
             "valid": False,
             "status": "UNSIGNED",
@@ -98,7 +101,7 @@ def verify_document(
             "signatures": [],
         }
 
-    data = Path(doc.signed_path).read_bytes()
+    data = signed_file.read_bytes()
     result = validate_pdf_bytes(data, settings)
     result["document"] = {
         "id": doc.id,

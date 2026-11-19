@@ -78,7 +78,9 @@ def create_app() -> FastAPI:
     async def admin_security_headers(request, call_next):
         response = await call_next(request)
         if request.url.path.startswith("/admin"):
-            response.headers.setdefault("X-Frame-Options", "DENY")
+            # SAMEORIGIN (bukan DENY) agar pratinjau surat/kop bisa memakai
+            # iframe dari origin yang sama, tanpa membuka framing eksternal.
+            response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
             response.headers.setdefault("Referrer-Policy", "same-origin")
             if not request.url.path.startswith("/admin/login"):

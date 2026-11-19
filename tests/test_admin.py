@@ -131,7 +131,7 @@ def test_admin_full_sign_flow(admin_client, sample_pdf):
     detail = admin_client.get(f"/admin/documents/{document_id}")
     assert detail.status_code == 200
     signer_id = re.search(
-        r'<option value="([0-9a-f-]{36})">Rektor Uji Admin', detail.text
+        r'<option value="([0-9a-f-]{36})"[^>]*>Rektor Uji Admin', detail.text
     ).group(1)
 
     created = admin_client.post(
@@ -145,6 +145,7 @@ def test_admin_full_sign_flow(admin_client, sample_pdf):
         follow_redirects=False,
     )
     assert created.status_code == 303
+    assert created.headers["location"].endswith("#permintaan-ttd")
 
     detail = admin_client.get(f"/admin/documents/{document_id}")
     request_id = re.search(r"/admin/requests/([0-9a-f-]{36})/consent", detail.text).group(1)
@@ -155,6 +156,7 @@ def test_admin_full_sign_flow(admin_client, sample_pdf):
         follow_redirects=False,
     )
     assert consent.status_code == 303
+    assert consent.headers["location"].endswith("#permintaan-ttd")
 
     signed = admin_client.post(
         f"/admin/requests/{request_id}/sign",
@@ -163,6 +165,7 @@ def test_admin_full_sign_flow(admin_client, sample_pdf):
     )
     assert signed.status_code == 303, signed.text
     assert f"/admin/documents/{document_id}" in signed.headers["location"]
+    assert signed.headers["location"].endswith("#permintaan-ttd")
 
     detail = admin_client.get(f"/admin/documents/{document_id}")
     assert "signed" in detail.text

@@ -20,6 +20,7 @@ from ..models import (
     Faculty,
     Institution,
     LetterRequest,
+    LetterTemplate,
     StudyProgram,
 )
 from ..tokens import make_token
@@ -145,6 +146,23 @@ def _master_data(db: Session) -> list[dict]:
     ]
 
 
+def _active_templates(db: Session) -> list[LetterTemplate]:
+    return list(
+        db.execute(
+            select(LetterTemplate)
+            .where(LetterTemplate.is_active.is_(True))
+            .order_by(LetterTemplate.letter_type.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _active_letter_types(db: Session) -> list[str]:
+    names = [row.letter_type for row in _active_templates(db)]
+    return names or list(LETTER_TYPES)
+
+
 def _form_context(
     request: Request,
     db: Session,
@@ -160,7 +178,7 @@ def _form_context(
         "csrf": csrf_token(settings),
         "master_data": master,
         "master_json": master,
-        "letter_types": LETTER_TYPES,
+        "letter_types": _active_letter_types(db),
         "academic_years": ACADEMIC_YEARS,
         "form": form or {},
         "error": error,
@@ -235,7 +253,13 @@ def request_submit(
             ),
             status_code=400,
         )
-    if letter_type not in LETTER_TYPES:
+    template = db.execute(
+        select(LetterTemplate).where(
+            LetterTemplate.letter_type == letter_type,
+            LetterTemplate.is_active.is_(True),
+        )
+    ).scalar_one_or_none()
+    if template is None:
         return templates.TemplateResponse(
             request,
             "permohonan.html",
@@ -301,6 +325,8 @@ def request_submit(
         semester=semester.strip() or None,
         academic_year=academic_year.strip() or None,
         letter_type=letter_type,
+        template_id=template.id,
+        signer_id=template.signer_id,
         purpose=purpose.strip() or None,
         notes=notes.strip() or None,
         research_title=research_title.strip() or None,

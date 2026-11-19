@@ -1,0 +1,214 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ 'Edit format surat' if editing else 'Format surat baru' }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/admin/letter-templates">Format Surat</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ 'Edit' if editing else 'Baru' }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">{{ 'Edit format surat' if editing else 'Format surat baru' }}</h4>
+    <p class="page-subtitle mb-0">Sisipkan keyword dari data permohonan; pratinjau memakai data contoh atau data permohonan nyata.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/admin/letter-templates">← Kembali</a>
+</div>
+
+<form method="post" action="/admin/letter-templates/save" id="template-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if editing %}<input type="hidden" name="template_id" value="{{ editing.id }}">{% endif %}
+
+  <div class="row g-4">
+    <div class="col-12 col-xl-5">
+      <div class="card mb-4">
+        <div class="card-header"><h5 class="card-title mb-0">Pengaturan format</h5></div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label" for="letter_type">Jenis surat</label>
+            <input id="letter_type" name="letter_type" class="form-control" required
+                   value="{{ editing.letter_type if editing else '' }}"
+                   placeholder="Surat Keterangan Aktif Kuliah">
+            <div class="form-text">Nama ini yang muncul di dropdown form permohonan publik.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="name">Nama format</label>
+            <input id="name" name="name" class="form-control" required
+                   value="{{ editing.name if editing else '' }}"
+                   placeholder="Format resmi 2026">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="signer_id">Penanda tangan bawaan</label>
+            <select id="signer_id" name="signer_id" class="form-select">
+              <option value="">— dipilih saat generate —</option>
+              {% for signer in signers %}
+              <option value="{{ signer.id }}" {{ 'selected' if editing and editing.signer_id == signer.id else '' }}>
+                {{ signer.name }} · {{ signer.jabatan }} ({{ signer.nip }})
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Dipakai sebagai pilihan awal saat membuat PDF; tetap bisa diubah.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="drive_folder_ref">Folder Drive</label>
+            <select id="drive_folder_ref" name="drive_folder_ref" class="form-select">
+              <option value="">— folder default —</option>
+              {% for folder in drive_folders %}
+              <option value="{{ folder.id }}" {{ 'selected' if editing and editing.drive_folder_ref == folder.id else '' }}>
+                {{ folder.name }}{% if folder.is_default %} (default){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">
+              PDF surat jenis ini disimpan ke folder tersebut.
+              {% if not drive_folders %}<a href="/admin/storage">Tambahkan folder</a> terlebih dahulu.{% endif %}
+            </div>
+          </div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1"
+                   {{ 'checked' if (not editing) or editing.is_active else '' }}>
+            <label class="form-check-label" for="is_active">Aktif (tampil di form permohonan)</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">Kata kunci</h5>
+          <select id="case-style" class="form-select form-select-sm" style="width:auto">
+            <option value="title">Title Case</option>
+            <option value="upper">KAPITAL</option>
+            <option value="lower">huruf kecil</option>
+          </select>
+        </div>
+        <div class="card-body keyword-panel">
+          {% for group, items in keyword_groups %}
+          <div class="keyword-group">
+            <div class="keyword-group-title">{{ group }}</div>
+            <div class="keyword-chips">
+              {% for key, label, sample in items %}
+              <button type="button" class="keyword-chip" data-keyword="{{ key }}" title="{{ label }} — contoh: {{ sample }}">
+                {{ label }}
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+          <div class="keyword-group">
+            <div class="keyword-group-title">Blok siap pakai</div>
+            <div class="keyword-chips">
+              <button type="button" class="keyword-chip" data-keyword="blok_ttd" data-raw="1" title="Kota, tanggal, jabatan, nama, NIP">
+                Blok tanda tangan
+              </button>
+            </div>
+          </div>
+          <div class="form-note mt-3">
+            <span class="mono">[NAMA]</span> kapital semua ·
+            <span class="mono">[nama]</span> kecil semua ·
+            <span class="mono">[Nama]</span> awal kata kapital.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-7">
+      <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">Isi surat (HTML)</h5>
+          <span class="small text-muted" id="preview-status">Pratinjau otomatis</span>
+        </div>
+        <div class="card-body">
+          <textarea id="body_html" name="body_html" class="form-control mono" rows="18" required
+                    placeholder="<p>Yang bertanda tangan di bawah ini ...</p>">{{ editing.body_html if editing else '' }}</textarea>
+          <div id="unknown-warning" class="alert alert-warning mt-3 d-none"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">Pratinjau</h5>
+          <span class="badge bg-label-secondary">A4</span>
+        </div>
+        <div class="card-body p-2">
+          <iframe id="preview-frame" title="Pratinjau surat"
+                  style="width:100%;height:620px;border:1px solid #e3e3e3;border-radius:.5rem;background:#fff"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mt-4">
+    <button class="btn btn-primary" type="submit"><i class="bx bx-save me-1"></i>Simpan format</button>
+    <a class="btn btn-outline-secondary" href="/admin/letter-templates">Batal</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const form = document.getElementById('template-form');
+  const body = document.getElementById('body_html');
+  const frame = document.getElementById('preview-frame');
+  const status = document.getElementById('preview-status');
+  const warning = document.getElementById('unknown-warning');
+  const caseStyle = document.getElementById('case-style');
+  const csrf = form.querySelector('input[name="csrf"]').value;
+  let timer = null;
+
+  function styleKeyword(key) {
+    const parts = key.split('_');
+    const mode = caseStyle.value;
+    return parts.map(function (part) {
+      if (mode === 'upper') return part.toUpperCase();
+      if (mode === 'lower') return part.toLowerCase();
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    }).join('_');
+  }
+
+  function refresh() {
+    status.textContent = 'Memperbarui…';
+    const data = new FormData();
+    data.append('csrf', csrf);
+    data.append('body_html', body.value);
+    fetch('/admin/letter-templates/preview', { method: 'POST', body: data })
+      .then(function (res) { return res.json(); })
+      .then(function (payload) {
+        frame.srcdoc = payload.html;
+        if (payload.unknown && payload.unknown.length) {
+          warning.classList.remove('d-none');
+          warning.innerHTML = '<i class="bx bx-error-circle me-1"></i>Keyword tidak dikenal: ' +
+            payload.unknown.map(function (item) { return '<span class="mono">[' + item + ']</span>'; }).join(', ');
+        } else {
+          warning.classList.add('d-none');
+        }
+        status.textContent = 'Pratinjau diperbarui';
+      })
+      .catch(function () { status.textContent = 'Gagal memperbarui pratinjau'; });
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    timer = setTimeout(refresh, 450);
+  }
+
+  document.querySelectorAll('.keyword-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      const key = chip.dataset.keyword;
+      const token = chip.dataset.raw ? '[blok_ttd]' : '[' + styleKeyword(key) + ']';
+      const start = body.selectionStart || 0;
+      const end = body.selectionEnd || 0;
+      body.value = body.value.slice(0, start) + token + body.value.slice(end);
+      body.focus();
+      body.selectionStart = body.selectionEnd = start + token.length;
+      schedule();
+    });
+  });
+
+  body.addEventListener('input', schedule);
+  caseStyle.addEventListener('change', schedule);
+  refresh();
+})();
+</script>
+{% endblock %}

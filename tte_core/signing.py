@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from io import BytesIO
 
 from pyhanko.pdf_utils import generic
@@ -25,10 +26,20 @@ logger = logging.getLogger(__name__)
 
 STAMP_HEADER = "Ditandatangani secara elektronik oleh"
 STAMP_FONT = SimpleFontEngineFactory.default_factory()
-STAMP_FONT_SIZE = 9
-STAMP_LEADING = 10
-STAMP_QR_SIZE = 56
-STAMP_TEXT_GAP = 6
+# Skala visual cap TTE: 0,605 = setengah ukuran, +10%, +10%.
+# Nilai pecahan memakai Fraction agar kompatibel dengan layout pyHanko.
+from fractions import Fraction
+
+STAMP_SCALE = Fraction(121, 200)
+# Jarak cap dari tepi kanan & bawah kertas (pt).
+STAMP_MARGIN_RIGHT = 20.0
+STAMP_MARGIN_BOTTOM = 20.0
+STAMP_FONT_SIZE = 9 * STAMP_SCALE
+STAMP_LEADING = 10 * STAMP_SCALE
+STAMP_QR_SIZE = round(56 * STAMP_SCALE)
+STAMP_TEXT_GAP = round(6 * STAMP_SCALE)
+STAMP_PADDING = round(4 * STAMP_SCALE)
+STAMP_BORDER_WIDTH = float(1 * STAMP_SCALE)
 
 
 class SigningError(RuntimeError):
@@ -80,9 +91,9 @@ def _signature_box(
     per_column = 3
     column = index // per_column
     row = index % per_column
-    x1 = max(80.0, width - 40.0 - column * (box_w + 12.0))
+    x1 = max(80.0, width - STAMP_MARGIN_RIGHT - column * (box_w + 12.0))
     x0 = max(20.0, x1 - box_w)
-    y0 = 40.0 + row * (box_h + 12.0)
+    y0 = STAMP_MARGIN_BOTTOM + row * (box_h + 12.0)
     if y0 + box_h > height - 40.0:
         y0 = max(40.0, height - 40.0 - box_h)
     return (x0, y0, x1, y0 + box_h)
@@ -142,13 +153,15 @@ def _sign_once(
         line % text_params if "%(" in line else line for line in stamp_lines
     ]
     text_width = max(len(line) for line in rendered_lines) * (
-        STAMP_FONT_SIZE * 0.6
+        float(STAMP_FONT_SIZE) * 0.6
     )
     text_height = len(stamp_lines) * STAMP_LEADING
-    qr_size = max(STAMP_QR_SIZE, text_height)
+    # QR tetap; tinggi kotak menyesuaikan jumlah baris teks agar tidak
+    # terpotong border (beri kelonggaran 4pt).
+    qr_size = STAMP_QR_SIZE
     # Sedikit toleransi agar glyph terakhir tidak tertimpa garis border.
-    box_w = qr_size + STAMP_TEXT_GAP + text_width + 4
-    box_h = qr_size + 4
+    box_w = qr_size + STAMP_TEXT_GAP + text_width + STAMP_PADDING
+    box_h = max(qr_size, math.ceil(text_height) + 4) + STAMP_PADDING
 
     box = _signature_box(width, height, field_index, box_w, box_h)
     # Link hanya pada tanda tangan pertama; anotasi tambahan pada revisi
@@ -191,7 +204,7 @@ def _sign_once(
                 y_align=AxisAlignment.ALIGN_MID,
                 margins=Margins.uniform(0),
             ),
-            border_width=1,
+            border_width=STAMP_BORDER_WIDTH,
             border_color=(0.0, 0.0, 0.0),
             qr_position=QRPosition.LEFT_OF_TEXT,
             qr_inner_size=qr_size,

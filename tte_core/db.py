@@ -58,8 +58,154 @@ def init_db() -> None:
 
     Base.metadata.create_all(get_engine())
     _ensure_signer_columns()
+    _ensure_letter_columns()
+    _ensure_letterhead_columns()
+    _ensure_letter_style_columns()
+    _ensure_email_settings_columns()
+    _ensure_document_columns()
+    _ensure_letter_template_columns()
     _seed_default_admin()
     _seed_default_master()
+    _seed_letter_defaults()
+
+
+def _ensure_letter_columns() -> None:
+    """Tambahkan kolom format surat pada tabel letter_requests (DB lama)."""
+    from sqlalchemy import inspect, text
+
+    engine = get_engine()
+    inspector = inspect(engine)
+    if "letter_requests" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("letter_requests")}
+    statements = []
+    if "template_id" not in columns:
+        statements.append(
+            "ALTER TABLE letter_requests ADD COLUMN template_id TEXT"
+        )
+    if "signer_id" not in columns:
+        statements.append("ALTER TABLE letter_requests ADD COLUMN signer_id TEXT")
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
+def _ensure_letterhead_columns() -> None:
+    """Tambahkan kolom baru pada tabel letterheads (DB lama)."""
+    from sqlalchemy import inspect, text
+
+    engine = get_engine()
+    inspector = inspect(engine)
+    if "letterheads" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("letterheads")}
+    statements = []
+    if "line5" not in columns:
+        statements.append("ALTER TABLE letterheads ADD COLUMN line5 TEXT")
+    if "accent_color" not in columns:
+        statements.append(
+            "ALTER TABLE letterheads ADD COLUMN accent_color VARCHAR(16)"
+            " DEFAULT '#0d6b3f'"
+        )
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
+def _ensure_letter_style_columns() -> None:
+    """Tambahkan kolom baru pada tabel letter_styles (DB lama)."""
+    from sqlalchemy import inspect, text
+
+    engine = get_engine()
+    inspector = inspect(engine)
+    if "letter_styles" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("letter_styles")}
+    if "kop_gap_mm" in columns:
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text("ALTER TABLE letter_styles ADD COLUMN kop_gap_mm FLOAT DEFAULT 4.0")
+        )
+
+
+def _ensure_document_columns() -> None:
+    """Tambahkan kolom Google Drive pada tabel documents (DB lama)."""
+    from sqlalchemy import inspect, text
+
+    engine = get_engine()
+    inspector = inspect(engine)
+    if "documents" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("documents")}
+    statements = []
+    if "drive_original_id" not in columns:
+        statements.append("ALTER TABLE documents ADD COLUMN drive_original_id TEXT")
+    if "drive_signed_id" not in columns:
+        statements.append("ALTER TABLE documents ADD COLUMN drive_signed_id TEXT")
+    if "drive_folder_id" not in columns:
+        statements.append("ALTER TABLE documents ADD COLUMN drive_folder_id TEXT")
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
+def _ensure_letter_template_columns() -> None:
+    """Tambahkan kolom folder Drive pada letter_templates (DB lama)."""
+    from sqlalchemy import inspect, text
+
+    engine = get_engine()
+    inspector = inspect(engine)
+    if "letter_templates" not in inspector.get_table_names():
+        return
+    columns = {
+        col["name"] for col in inspector.get_columns("letter_templates")
+    }
+    if "drive_folder_ref" in columns:
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text("ALTER TABLE letter_templates ADD COLUMN drive_folder_ref TEXT")
+        )
+
+
+def _ensure_email_settings_columns() -> None:
+    """Tambahkan kolom baru pada tabel email_settings (DB lama)."""
+    from sqlalchemy import inspect, text
+
+    engine = get_engine()
+    inspector = inspect(engine)
+    if "email_settings" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("email_settings")}
+    statements = []
+    if "on_signed" not in columns:
+        statements.append(
+            "ALTER TABLE email_settings ADD COLUMN on_signed BOOLEAN DEFAULT 1"
+        )
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
+def _seed_letter_defaults() -> None:
+    """Isi kop surat dan format surat contoh bila belum tersedia."""
+    from .letter_docs import seed_defaults
+
+    settings = get_settings()
+    session = get_session_factory()()
+    try:
+        seed_defaults(session, settings)
+    finally:
+        session.close()
 
 
 def _ensure_signer_columns() -> None:

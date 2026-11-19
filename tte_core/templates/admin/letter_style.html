@@ -1,0 +1,154 @@
+{% extends "admin/base.html" %}
+{% block title %}Tipografi Surat{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/admin/letter-templates">Format Surat</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Tipografi</li>
+  </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Tipografi Surat</h4>
+    <p class="page-subtitle mb-0">Jenis huruf, ukuran, spasi, margin, dan ukuran teks kop.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/admin/letter-templates">← Kembali</a>
+</div>
+
+<ul class="nav nav-pills gap-2 mb-4">
+  <li class="nav-item"><a class="nav-link {{ 'active' if active_tab == 'templates' else '' }}" href="/admin/letter-templates"><i class="bx bx-layout me-1"></i>Format</a></li>
+  <li class="nav-item"><a class="nav-link {{ 'active' if active_tab == 'head' else '' }}" href="/admin/letterhead"><i class="bx bx-image-alt me-1"></i>Kop Surat</a></li>
+  <li class="nav-item"><a class="nav-link {{ 'active' if active_tab == 'style' else '' }}" href="/admin/letter-style"><i class="bx bx-font me-1"></i>Tipografi</a></li>
+</ul>
+
+<div class="row g-4">
+  <div class="col-12 col-xl-5">
+    <form method="post" action="/admin/letter-style">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+
+      <div class="card mb-4">
+        <div class="card-header"><h5 class="card-title mb-0">Teks isi surat</h5></div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label" for="body_font">Jenis huruf</label>
+            <select id="body_font" name="body_font" class="form-select">
+              {% for font in font_choices %}
+              <option value="{{ font }}" {{ 'selected' if style.body_font == font else '' }}>{{ font }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Pilihan mengikuti font yang tersedia di sistem.</div>
+          </div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label" for="body_size_pt">Ukuran (pt)</label>
+              <input id="body_size_pt" name="body_size_pt" type="number" class="form-control"
+                     min="8" max="24" step="0.5" value="{{ style.body_size_pt }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="line_height">Jarak baris</label>
+              <input id="line_height" name="line_height" type="number" class="form-control"
+                     min="1" max="3" step="0.05" value="{{ style.line_height }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="paragraph_gap_pt">Jarak paragraf (pt)</label>
+              <input id="paragraph_gap_pt" name="paragraph_gap_pt" type="number" class="form-control"
+                     min="0" max="30" step="1" value="{{ style.paragraph_gap_pt }}">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header"><h5 class="card-title mb-0">Margin halaman (cm)</h5></div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label" for="margin_top_cm">Atas</label>
+              <input id="margin_top_cm" name="margin_top_cm" type="number" class="form-control"
+                     min="1" max="5" step="0.1" value="{{ style.margin_top_cm }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="margin_bottom_cm">Bawah</label>
+              <input id="margin_bottom_cm" name="margin_bottom_cm" type="number" class="form-control"
+                     min="1" max="5" step="0.1" value="{{ style.margin_bottom_cm }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="margin_left_cm">Kiri</label>
+              <input id="margin_left_cm" name="margin_left_cm" type="number" class="form-control"
+                     min="1" max="5" step="0.1" value="{{ style.margin_left_cm }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="margin_right_cm">Kanan</label>
+              <input id="margin_right_cm" name="margin_right_cm" type="number" class="form-control"
+                     min="1" max="5" step="0.1" value="{{ style.margin_right_cm }}">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header"><h5 class="card-title mb-0">Teks kop surat</h5></div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label" for="kop_gap_mm">Jarak logo ke teks (mm)</label>
+            <input id="kop_gap_mm" name="kop_gap_mm" type="number" class="form-control"
+                   min="0" max="20" step="0.5" value="{{ style.kop_gap_mm }}">
+            <div class="form-text">Ruang kosong antara logo dan blok teks kop.</div>
+          </div>
+          <div class="row g-3">
+            <div class="col-4">
+              <label class="form-label" for="kop_line1_size_pt">Baris 1 (pt)</label>
+              <input id="kop_line1_size_pt" name="kop_line1_size_pt" type="number" class="form-control"
+                     min="6" max="24" step="0.5" value="{{ style.kop_line1_size_pt }}">
+            </div>
+            <div class="col-4">
+              <label class="form-label" for="kop_main_size_pt">Baris utama (pt)</label>
+              <input id="kop_main_size_pt" name="kop_main_size_pt" type="number" class="form-control"
+                     min="6" max="30" step="0.5" value="{{ style.kop_main_size_pt }}">
+            </div>
+            <div class="col-4">
+              <label class="form-label" for="kop_address_size_pt">Alamat (pt)</label>
+              <input id="kop_address_size_pt" name="kop_address_size_pt" type="number" class="form-control"
+                     min="5" max="16" step="0.5" value="{{ style.kop_address_size_pt }}">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary w-100" type="submit">
+        <i class="bx bx-save me-1"></i>Simpan tipografi
+      </button>
+    </form>
+  </div>
+
+  <div class="col-12 col-xl-7">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">Pratinjau</h5>
+        <button class="btn btn-sm btn-outline-primary" type="button" id="reload-style">
+          <i class="bx bx-refresh me-1"></i>Muat ulang
+        </button>
+      </div>
+      <div class="card-body p-2">
+        <iframe id="style-frame" src="/admin/letter-style/preview" title="Pratinjau tipografi"
+                style="width:100%;height:720px;border:1px solid #e3e3e3;border-radius:.5rem;background:#fff"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const frame = document.getElementById('style-frame');
+  const button = document.getElementById('reload-style');
+  if (button) {
+    button.addEventListener('click', function () {
+      frame.src = '/admin/letter-style/preview?t=' + Date.now();
+    });
+  }
+})();
+</script>
+{% endblock %}

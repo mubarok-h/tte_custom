@@ -12,6 +12,7 @@ from ..models import Document
 from ..operations import (
     OperationError,
     create_sign_request as create_sign_request_op,
+    finalize_letter_if_complete,
     grant_consent as grant_consent_op,
     sign_request as sign_request_op,
     upload_document as upload_document_op,
@@ -149,6 +150,9 @@ def sign(
     _: None = Depends(require_auth),
 ) -> SignResult:
     try:
-        return sign_request_op(db, request_id=request_id)
+        result = sign_request_op(db, request_id=request_id)
     except OperationError as exc:
         _raise_http(exc)
+    # Kirim email surat hanya setelah semua penandatangan selesai.
+    finalize_letter_if_complete(db, result.document_id)
+    return result

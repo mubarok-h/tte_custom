@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hmac
+import json
+import re
 import shutil
 import time
 from datetime import datetime, timezone
@@ -17,7 +19,12 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+)
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -35,12 +42,40 @@ from ..admin_auth import (
 from ..audit import append_event, verify_chain
 from ..config import get_settings
 from ..db import get_db
+from ..mailer import (
+    MailError,
+    get_email_config,
+    send_email,
+    send_letter_email,
+    store_email_password,
+)
+from ..letter_docs import (
+    KEYWORD_GROUPS,
+    build_context,
+    FONT_CHOICES,
+    get_active_letterhead,
+    get_active_style,
+    logo_file,
+    render_letter_html,
+    render_pdf,
+    render_preview_html,
+    render_head_preview,
+    render_text,
+    sample_context,
+)
 from ..models import (
     AuditEvent,
     Document,
+    DriveFolder,
+    EmailLog,
+    EmailSettings,
     Faculty,
     Institution,
+    LetterHead,
     LetterRequest,
+    LetterStyle,
+    LetterTemplate,
+    StorageSettings,
     SignatureRecord,
     SignerProfile,
     SignRequest,
@@ -48,6 +83,15 @@ from ..models import (
     User,
     VerificationToken,
     utcnow,
+)
+from ..drive import (
+    DriveError,
+    delete_file as drive_delete_file,
+    ensure_document_file,
+    folder_for_ref as drive_folder_for_ref,
+    get_drive_config,
+    store_credentials,
+    test_connection as drive_test_connection,
 )
 from ..pki import PkiError
 from ..signer_certs import (
@@ -57,6 +101,8 @@ from ..signer_certs import (
 from ..operations import (
     OperationError,
     create_sign_request as create_sign_request_op,
+    finalize_letter_if_complete,
+    letter_signatures_complete,
     grant_consent as grant_consent_op,
     sign_request as sign_request_op,
     upload_document as upload_document_op,
@@ -195,10 +241,21 @@ def _context(request: Request, *, active: str, **extra) -> dict:
 def _redirect(
     url: str, msg: str | None = None, kind: str = "ok"
 ) -> RedirectResponse:
+    fragment = ""
+    if "#" in url:
+        url, _, anchor = url.partition("#")
+        fragment = f"#{anchor}"
     if msg:
         separator = "&" if "?" in url else "?"
         url = f"{url}{separator}{urlencode({'msg': msg, 'kind': kind})}"
-    return RedirectResponse(url=url, status_code=303)
+    return RedirectResponse(url=url + fragment, status_code=303)
+
+
+def _doc_anchor(url: str) -> str:
+    """Arahkan kembali ke panel aksi tanda tangan pada halaman dokumen."""
+    if url.startswith("/admin/documents/") and "#" not in url:
+        return f"{url}#permintaan-ttd"
+    return url
 
 
 def _safe_next(value: str | None, fallback: str = "/admin") -> str:
@@ -567,6 +624,7 @@ async def documents_upload(
 def document_detail(
     request: Request,
     document_id: str,
+    signer: str = Query(default=""),
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin),
 ):
@@ -609,6 +667,7 @@ def document_detail(
         _context(
             request,
             active="documents",
+            preselect_signer_id=signer,
             doc=doc,
             signers=signers,
             requests=requests,
@@ -655,6 +714,10 @@ def document_delete(
     }
     append_event(db, "document.deleted", metadata)
 
+    config = get_drive_config(db)
+    drive_delete_file(config, doc.drive_original_id or "")
+    drive_delete_file(config, doc.drive_signed_id or "")
+
     doc_id = doc.id
     tokens = (
         db.execute(
@@ -688,19 +751,15 @@ def document_file(
     if variant not in _DOWNLOAD_VARIANTS:
         raise HTTPException(status_code=400, detail="Varian berkas tidak dikenal.")
 
-    settings = get_settings()
-    if variant == "signed":
-        if not doc.signed_path:
-            raise HTTPException(status_code=404, detail="PDF bertanda tangan belum ada.")
-        path = Path(doc.signed_path)
-        filename = f"{Path(doc.filename).stem}-tte.pdf"
-    else:
-        path = Path(doc.original_path) if doc.original_path else original_path(
-            settings, doc.id
-        )
-        filename = Path(doc.filename).name
-
-    if not path.exists():
+    if variant == "signed" and not doc.signed_path and not doc.drive_signed_id:
+        raise HTTPException(status_code=404, detail="PDF bertanda tangan belum ada.")
+    path = ensure_document_file(db, doc, variant)
+    filename = (
+        f"{Path(doc.filename).stem}-tte.pdf"
+        if variant == "signed"
+        else Path(doc.filename).name
+    )
+    if path is None or not path.exists():
         raise HTTPException(status_code=404, detail="Berkas tidak tersedia.")
     return FileResponse(
         path,
@@ -721,7 +780,7 @@ def document_create_request(
     _admin: str = Depends(require_admin),
     _csrf: None = Depends(require_csrf),
 ):
-    target = _safe_next(next, f"/admin/documents/{document_id}")
+    target = _doc_anchor(_safe_next(next, f"/admin/documents/{document_id}"))
     if not signer_id:
         return _redirect(target, "Pilih penanda tangan terlebih dahulu.", "err")
 
@@ -1067,7 +1126,7 @@ def requests_consent(
     _admin: str = Depends(require_admin),
     _csrf: None = Depends(require_csrf),
 ):
-    target = _safe_next(next, "/admin/requests")
+    target = _doc_anchor(_safe_next(next, "/admin/requests"))
     try:
         grant_consent_op(
             db,
@@ -1095,32 +1154,16 @@ def requests_sign(
     except OperationError as exc:
         return _redirect(target, exc.message, "err")
 
-    letter = db.execute(
-        select(LetterRequest)
-        .where(
-            LetterRequest.document_id == result.document_id,
-            LetterRequest.status == "approved",
-        )
-        .limit(1)
-    ).scalar_one_or_none()
+    letter = finalize_letter_if_complete(db, result.document_id)
+    note = ""
     if letter is not None:
-        letter.status = "signed"
-        letter.approved_at = letter.approved_at or utcnow()
-        append_event(
-            db,
-            "letter.signed",
-            {
-                "letter_id": letter.id,
-                "request_no": letter.request_no,
-                "document_id": result.document_id,
-                "pades_level": result.pades_level,
-            },
-        )
-        db.commit()
+        note = " Semua penandatangan selesai; surat terbit dan email dikirim."
+    elif not letter_signatures_complete(db, result.document_id):
+        note = " Menunggu penanda tangan lainnya."
 
     return _redirect(
-        f"/admin/documents/{result.document_id}",
-        f"Dokumen ditandatangani ({result.pades_level}). Unduh PDF di panel kanan.",
+        f"/admin/documents/{result.document_id}#permintaan-ttd",
+        f"Dokumen ditandatangani ({result.pades_level}).{note}",
     )
 
 
@@ -1847,18 +1890,9 @@ def letter_detail(
     if letter is None:
         raise HTTPException(status_code=404, detail="Permintaan surat tidak ditemukan.")
     document = db.get(Document, letter.document_id) if letter.document_id else None
-    if (
-        document is not None
-        and document.status == "signed"
-        and letter.status == "approved"
-    ):
-        letter.status = "signed"
-        append_event(
-            db,
-            "letter.signed",
-            {"letter_id": letter.id, "document_id": document.id},
-        )
-        db.commit()
+    if document is not None and letter.status == "approved":
+        # Data lama: finalisasi bila seluruh tanda tangan sudah lengkap.
+        finalize_letter_if_complete(db, document.id)
     return templates.TemplateResponse(
         request,
         "admin/letter_detail.html",
@@ -1868,6 +1902,13 @@ def letter_detail(
             letter=letter,
             document=document,
             statuses=LETTER_STATUSES,
+            signers=_active_signers(db),
+            template=_template_for_letter(db, letter),
+            letter_signer=(
+                db.get(SignerProfile, letter.signer_id)
+                if letter.signer_id
+                else None
+            ),
             current_path=f"/admin/letters/{letter.id}",
         ),
     )
@@ -1938,7 +1979,23 @@ def letter_approve(
         },
     )
     db.commit()
-    return _redirect(target, "Permohonan disetujui dan nomor surat terbit.")
+
+    config = get_email_config(db)
+    document = db.get(Document, letter.document_id) if letter.document_id else None
+    note, kind = "", "ok"
+    if config.on_approve:
+        log = send_letter_email(
+            db, letter, config, kind="approved", document=document
+        )
+        if log is not None and log.status == "sent":
+            note = " Email pemberitahuan terkirim ke pemohon."
+        elif log is not None:
+            note = f" Email gagal dikirim: {log.error}"
+            kind = "warn"
+
+    return _redirect(
+        target, "Permohonan disetujui dan nomor surat terbit." + note, kind
+    )
 
 
 @router.post("/letters/{letter_id}/reject")
@@ -2019,4 +2076,950 @@ async def letter_upload_document(
     return _redirect(
         f"/admin/documents/{doc.id}",
         "PDF final terhubung. Lanjutkan pembuatan permintaan TTE di halaman dokumen.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Format surat & kop surat
+# ---------------------------------------------------------------------------
+
+
+def _active_signers(db: Session) -> list[SignerProfile]:
+    return list(
+        db.execute(
+            select(SignerProfile)
+            .where(SignerProfile.status == "active")
+            .order_by(SignerProfile.name.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _template_rows(db: Session) -> list[LetterTemplate]:
+    return list(
+        db.execute(
+            select(LetterTemplate).order_by(LetterTemplate.letter_type.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _template_for_letter(
+    db: Session, letter: LetterRequest
+) -> LetterTemplate | None:
+    if letter.template_id:
+        template = db.get(LetterTemplate, letter.template_id)
+        if template is not None:
+            return template
+    return db.execute(
+        select(LetterTemplate).where(LetterTemplate.letter_type == letter.letter_type)
+    ).scalar_one_or_none()
+
+
+def _drive_folders(db: Session) -> list[DriveFolder]:
+    return list(
+        db.execute(
+            select(DriveFolder).order_by(DriveFolder.name.asc())
+        ).scalars()
+    )
+
+
+@router.get("/letter-templates", response_class=HTMLResponse)
+def letter_templates_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    signers = _active_signers(db)
+    return templates.TemplateResponse(
+        request,
+        "admin/letter_templates.html",
+        _context(
+            request,
+            active="templates",
+            active_tab="templates",
+            rows=_template_rows(db),
+            signers=signers,
+            signer_map={row.id: row for row in signers},
+            letterhead=get_active_letterhead(db),
+            drive_folders=_drive_folders(db),
+        ),
+    )
+
+
+@router.get("/letter-templates/new", response_class=HTMLResponse)
+def letter_template_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    return templates.TemplateResponse(
+        request,
+        "admin/letter_template_form.html",
+        _context(
+            request,
+            active="templates",
+            editing=None,
+            signers=_active_signers(db),
+            keyword_groups=KEYWORD_GROUPS,
+            letterhead=get_active_letterhead(db),
+            drive_folders=_drive_folders(db),
+        ),
+    )
+
+
+@router.get("/letter-templates/{template_id}", response_class=HTMLResponse)
+def letter_template_edit(
+    request: Request,
+    template_id: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    template = db.get(LetterTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Format surat tidak ditemukan.")
+    return templates.TemplateResponse(
+        request,
+        "admin/letter_template_form.html",
+        _context(
+            request,
+            active="templates",
+            editing=template,
+            signers=_active_signers(db),
+            keyword_groups=KEYWORD_GROUPS,
+            letterhead=get_active_letterhead(db),
+            drive_folders=_drive_folders(db),
+        ),
+    )
+
+
+@router.post("/letter-templates/save")
+def letter_template_save(
+    request: Request,
+    letter_type: str = Form(default=""),
+    name: str = Form(default=""),
+    body_html: str = Form(default=""),
+    signer_id: str = Form(default=""),
+    drive_folder_ref: str = Form(default=""),
+    is_active: str = Form(default=""),
+    template_id: str = Form(default=""),
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    letter_type = letter_type.strip()
+    name = name.strip()
+    if not letter_type or not name:
+        return _redirect(
+            "/admin/letter-templates", "Jenis surat dan nama format wajib diisi.", "err"
+        )
+    if not (body_html or "").strip():
+        return _redirect(
+            "/admin/letter-templates", "Isi format surat tidak boleh kosong.", "err"
+        )
+
+    duplicate = db.execute(
+        select(LetterTemplate).where(LetterTemplate.letter_type == letter_type)
+    ).scalar_one_or_none()
+
+    template = db.get(LetterTemplate, template_id) if template_id else None
+    if template is None:
+        template = duplicate
+    if duplicate is not None and duplicate is not template:
+        return _redirect(
+            "/admin/letter-templates",
+            f"Jenis surat '{letter_type}' sudah punya format. Edit format tersebut.",
+            "err",
+        )
+
+    signer = db.get(SignerProfile, signer_id) if signer_id else None
+    if template is None:
+        template = LetterTemplate(
+            letter_type=letter_type,
+            created_by=admin.name,
+        )
+        db.add(template)
+
+    template.letter_type = letter_type
+    template.name = name
+    template.body_html = body_html
+    template.signer_id = signer.id if signer else None
+    folder = db.get(DriveFolder, drive_folder_ref) if drive_folder_ref else None
+    template.drive_folder_ref = folder.id if folder else None
+    template.is_active = bool(is_active)
+    template.updated_at = utcnow()
+
+    append_event(
+        db,
+        "letter_template.saved",
+        {
+            "template_id": template.id,
+            "letter_type": letter_type,
+            "active": template.is_active,
+        },
+    )
+    db.commit()
+    return _redirect(
+        "/admin/letter-templates", f"Format '{letter_type}' disimpan."
+    )
+
+
+@router.post("/letter-templates/{template_id}/toggle")
+def letter_template_toggle(
+    template_id: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    template = db.get(LetterTemplate, template_id)
+    if template is None:
+        return _redirect("/admin/letter-templates", "Format tidak ditemukan.", "err")
+    template.is_active = not template.is_active
+    template.updated_at = utcnow()
+    append_event(
+        db,
+        "letter_template.toggled",
+        {"template_id": template.id, "active": template.is_active},
+    )
+    db.commit()
+    state = "diaktifkan" if template.is_active else "dinonaktifkan"
+    return _redirect(
+        "/admin/letter-templates", f"Format '{template.letter_type}' {state}."
+    )
+
+
+@router.post("/letter-templates/{template_id}/delete")
+def letter_template_delete(
+    template_id: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    template = db.get(LetterTemplate, template_id)
+    if template is None:
+        return _redirect("/admin/letter-templates", "Format tidak ditemukan.", "err")
+    letter_type = template.letter_type
+    # Permohonan lama tetap aman: letter_type disimpan sebagai teks.
+    for letter in db.execute(
+        select(LetterRequest).where(LetterRequest.template_id == template.id)
+    ).scalars():
+        letter.template_id = None
+    append_event(
+        db,
+        "letter_template.deleted",
+        {"template_id": template.id, "letter_type": letter_type},
+    )
+    db.delete(template)
+    db.commit()
+    return _redirect(
+        "/admin/letter-templates", f"Format '{letter_type}' dihapus."
+    )
+
+
+@router.post("/letter-templates/preview")
+def letter_template_preview(
+    body_html: str = Form(default=""),
+    letter_id: str = Form(default=""),
+    signer_id: str = Form(default=""),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    settings = get_settings()
+    signer = db.get(SignerProfile, signer_id) if signer_id else None
+    letter = db.get(LetterRequest, letter_id) if letter_id else None
+    if letter is not None:
+        if signer is None and letter.signer_id:
+            signer = db.get(SignerProfile, letter.signer_id)
+        context = build_context(letter, signer, settings)
+    else:
+        context = sample_context(settings)
+
+    document, unknown = render_preview_html(
+        body_html,
+        context,
+        get_active_letterhead(db),
+        logo_src="/admin/letterhead/logo",
+        style=get_active_style(db),
+    )
+    return JSONResponse({"html": document, "unknown": unknown})
+
+
+@router.get("/letterhead", response_class=HTMLResponse)
+def letterhead_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    return templates.TemplateResponse(
+        request,
+        "admin/letterhead.html",
+        _context(
+            request,
+            active="templates",
+            active_tab="head",
+            letterhead=get_active_letterhead(db),
+        ),
+    )
+
+
+@router.post("/letterhead")
+async def letterhead_save(
+    request: Request,
+    name: str = Form(default="Kop Surat Utama"),
+    line1: str = Form(default=""),
+    line2: str = Form(default=""),
+    line3: str = Form(default=""),
+    line4: str = Form(default=""),
+    line5: str = Form(default=""),
+    accent_color: str = Form(default=""),
+    html_override: str = Form(default=""),
+    logo: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    settings = get_settings()
+    letterhead = get_active_letterhead(db)
+    if letterhead is None:
+        letterhead = LetterHead(is_active=True)
+        db.add(letterhead)
+
+    letterhead.name = name.strip() or "Kop Surat Utama"
+    letterhead.line1 = line1.strip() or None
+    letterhead.line2 = line2.strip() or None
+    letterhead.line3 = line3.strip() or None
+    letterhead.line4 = line4.strip() or None
+    letterhead.line5 = line5.strip() or None
+    color = accent_color.strip() or "#0d6b3f"
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        color = "#0d6b3f"
+    letterhead.accent_color = color
+    letterhead.html_override = (html_override or "").strip() or None
+    letterhead.updated_at = utcnow()
+
+    if logo is not None and logo.filename:
+        suffix = Path(logo.filename).suffix.lower()
+        if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+            return _redirect(
+                "/admin/letterhead", "Logo harus berupa gambar PNG/JPG.", "err"
+            )
+        directory = settings.data_dir / "letterheads"
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / f"logo{suffix}"
+        data = await logo.read()
+        if len(data) > 2 * 1024 * 1024:
+            return _redirect("/admin/letterhead", "Ukuran logo maksimal 2 MB.", "err")
+        target.write_bytes(data)
+        letterhead.logo_path = str(target)
+
+    append_event(db, "letterhead.saved", {"letterhead_id": letterhead.id})
+    db.commit()
+    return _redirect("/admin/letterhead", "Kop surat disimpan.")
+
+
+@router.get("/letterhead/logo")
+def letterhead_logo(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    path = logo_file(get_active_letterhead(db))
+    if path is None:
+        raise HTTPException(status_code=404, detail="Logo belum tersedia.")
+    return FileResponse(path)
+
+
+@router.get("/letterhead/preview", response_class=HTMLResponse)
+def letterhead_preview(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    return HTMLResponse(
+        render_head_preview(
+            get_active_letterhead(db),
+            logo_src="/admin/letterhead/logo",
+            style=get_active_style(db),
+        )
+    )
+
+
+def _remove_document(db: Session, doc: Document) -> None:
+    """Hapus dokumen lama saat format surat digenerate ulang."""
+    settings = get_settings()
+    for token in db.execute(
+        select(VerificationToken).where(VerificationToken.document_id == doc.id)
+    ).scalars():
+        db.delete(token)
+    db.delete(doc)
+    db.commit()
+    shutil.rmtree(settings.documents_dir / doc.id, ignore_errors=True)
+
+
+@router.post("/letters/{letter_id}/generate")
+def letter_generate(
+    request: Request,
+    letter_id: str,
+    signer_id: str = Form(default=""),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    target = f"/admin/letters/{letter_id}"
+    letter = db.get(LetterRequest, letter_id)
+    if letter is None:
+        return _redirect("/admin/letters", "Permintaan tidak ditemukan.", "err")
+    if letter.status != "approved":
+        return _redirect(
+            target, "Setujui permohonan sebelum membuat PDF surat.", "err"
+        )
+
+    template = _template_for_letter(db, letter)
+    if template is None:
+        return _redirect(
+            target, "Format surat untuk jenis ini belum tersedia.", "err"
+        )
+
+    signer = db.get(SignerProfile, signer_id) if signer_id else None
+    if signer is None and template.signer_id:
+        signer = db.get(SignerProfile, template.signer_id)
+    if signer is None:
+        active = _active_signers(db)
+        signer = active[0] if active else None
+    if signer is None:
+        return _redirect(
+            target, "Tambahkan penanda tangan aktif terlebih dahulu.", "err"
+        )
+
+    existing = db.get(Document, letter.document_id) if letter.document_id else None
+    if existing is not None and existing.status == "signed":
+        return _redirect(
+            target, "Dokumen sudah ditandatangani dan tidak dapat dibuat ulang.", "err"
+        )
+
+    settings = get_settings()
+    document_html, unknown = render_letter_html(
+        letter=letter,
+        template=template,
+        letterhead=get_active_letterhead(db),
+        signer=signer,
+        settings=settings,
+        style=get_active_style(db),
+    )
+    if unknown:
+        listing = ", ".join(f"[{item}]" for item in unknown[:8])
+        return _redirect(
+            target,
+            f"Keyword tidak dikenal: {listing}. Perbaiki format surat dahulu.",
+            "err",
+        )
+
+    try:
+        pdf_bytes = render_pdf(document_html)
+    except Exception as exc:  # noqa: BLE001
+        return _redirect(target, f"Gagal membuat PDF: {exc}", "err")
+
+    if existing is not None:
+        _remove_document(db, existing)
+        letter.document_id = None
+        db.flush()
+
+    filename = f"{letter.letter_type} - {letter.applicant_name}.pdf"
+    drive_folder = drive_folder_for_ref(db, template.drive_folder_ref) or None
+    doc = upload_document_op(
+        db, data=pdf_bytes, filename=filename, drive_folder_id=drive_folder
+    )
+    letter.document_id = doc.id
+    letter.signer_id = signer.id
+    letter.template_id = template.id
+    append_event(
+        db,
+        "letter.generated",
+        {
+            "letter_id": letter.id,
+            "document_id": doc.id,
+            "template_id": template.id,
+            "signer_id": signer.id,
+        },
+    )
+    db.commit()
+    return _redirect(
+        f"/admin/documents/{doc.id}?signer={signer.id}",
+        "PDF surat dibuat. Email dikirim otomatis setelah semua "
+        "penandatangan menyelesaikan TTE.",
+    )
+
+
+@router.get("/letters/{letter_id}/preview", response_class=HTMLResponse)
+def letter_preview(
+    letter_id: str,
+    template_id: str = Query(default=""),
+    signer_id: str = Query(default=""),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    letter = db.get(LetterRequest, letter_id)
+    if letter is None:
+        raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan.")
+    template = (
+        db.get(LetterTemplate, template_id)
+        if template_id
+        else _template_for_letter(db, letter)
+    )
+    if template is None:
+        raise HTTPException(status_code=404, detail="Format surat belum tersedia.")
+    settings = get_settings()
+    signer = db.get(SignerProfile, signer_id) if signer_id else None
+    if signer is None and letter.signer_id:
+        signer = db.get(SignerProfile, letter.signer_id)
+    document_html, _unknown = render_letter_html(
+        letter=letter,
+        template=template,
+        letterhead=get_active_letterhead(db),
+        signer=signer,
+        settings=settings,
+        logo_src="/admin/letterhead/logo",
+        style=get_active_style(db),
+    )
+    return HTMLResponse(document_html)
+
+
+@router.get("/letter-style", response_class=HTMLResponse)
+def letter_style_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    return templates.TemplateResponse(
+        request,
+        "admin/letter_style.html",
+        _context(
+            request,
+            active="templates",
+            active_tab="style",
+            style=get_active_style(db),
+            font_choices=FONT_CHOICES,
+        ),
+    )
+
+
+def _float_field(value: str, default: float, low: float, high: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(number, low), high)
+
+
+@router.post("/letter-style")
+def letter_style_save(
+    request: Request,
+    body_font: str = Form(default="Times New Roman"),
+    body_size_pt: str = Form(default="12"),
+    line_height: str = Form(default="1.55"),
+    paragraph_gap_pt: str = Form(default="10"),
+    margin_top_cm: str = Form(default="2"),
+    margin_bottom_cm: str = Form(default="2.2"),
+    margin_left_cm: str = Form(default="2.6"),
+    margin_right_cm: str = Form(default="2.4"),
+    kop_gap_mm: str = Form(default="4"),
+    kop_line1_size_pt: str = Form(default="11.5"),
+    kop_main_size_pt: str = Form(default="14"),
+    kop_address_size_pt: str = Form(default="8.5"),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    style = (
+        db.execute(
+            select(LetterStyle).order_by(LetterStyle.updated_at.desc()).limit(1)
+        ).scalar_one_or_none()
+    )
+    if style is None:
+        style = LetterStyle()
+        db.add(style)
+
+    style.body_font = (
+        body_font.strip() if body_font.strip() in FONT_CHOICES else "Times New Roman"
+    )
+    style.body_size_pt = _float_field(body_size_pt, 12, 8, 24)
+    style.line_height = _float_field(line_height, 1.55, 1, 3)
+    style.paragraph_gap_pt = _float_field(paragraph_gap_pt, 10, 0, 30)
+    style.margin_top_cm = _float_field(margin_top_cm, 2, 1, 5)
+    style.margin_bottom_cm = _float_field(margin_bottom_cm, 2.2, 1, 5)
+    style.margin_left_cm = _float_field(margin_left_cm, 2.6, 1, 5)
+    style.margin_right_cm = _float_field(margin_right_cm, 2.4, 1, 5)
+    style.kop_gap_mm = _float_field(kop_gap_mm, 4, 0, 20)
+    style.kop_line1_size_pt = _float_field(kop_line1_size_pt, 11.5, 6, 24)
+    style.kop_main_size_pt = _float_field(kop_main_size_pt, 14, 6, 30)
+    style.kop_address_size_pt = _float_field(kop_address_size_pt, 8.5, 5, 16)
+    style.updated_at = utcnow()
+
+    append_event(
+        db,
+        "letter_style.saved",
+        {
+            "body_font": style.body_font,
+            "body_size_pt": style.body_size_pt,
+            "line_height": style.line_height,
+        },
+    )
+    db.commit()
+    return _redirect("/admin/letter-style", "Pengaturan tipografi disimpan.")
+
+
+@router.get("/letter-style/preview", response_class=HTMLResponse)
+def letter_style_preview(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    template = (
+        db.execute(
+            select(LetterTemplate)
+            .where(LetterTemplate.is_active.is_(True))
+            .order_by(LetterTemplate.letter_type.asc())
+            .limit(1)
+        )
+        .scalar_one_or_none()
+    )
+    body = (
+        template.body_html
+        if template is not None
+        else (
+            "<p>Contoh isi surat dengan pengaturan tipografi yang dipilih. "
+            "Paragraf ini menunjukkan ukuran huruf, jarak antarbaris, dan "
+            "lebar margin halaman.</p>"
+            "<p>Demikian contoh ini dibuat untuk melihat hasil akhir sebelum "
+            "surat diterbitkan.</p>"
+        )
+    )
+    settings = get_settings()
+    document, _unknown = render_preview_html(
+        body,
+        sample_context(settings),
+        get_active_letterhead(db),
+        logo_src="/admin/letterhead/logo",
+        style=get_active_style(db),
+    )
+    return HTMLResponse(document)
+
+
+@router.get("/email", response_class=HTMLResponse)
+def email_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    config = get_email_config(db)
+    logs = (
+        db.execute(
+            select(EmailLog)
+            .order_by(EmailLog.created_at.desc())
+            .limit(25)
+        )
+        .scalars()
+        .all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "admin/email.html",
+        _context(
+            request,
+            active="email",
+            smtp=config,
+            email_ready=config.ready,
+            has_password=bool(config.password),
+            logs=logs,
+        ),
+    )
+
+
+@router.post("/email/save")
+def email_save(
+    host: str = Form(default="smtp.gmail.com"),
+    port: str = Form(default="587"),
+    username: str = Form(default=""),
+    password: str = Form(default=""),
+    from_name: str = Form(default="STIT Buntet Pesantren"),
+    from_email: str = Form(default=""),
+    use_ssl: str = Form(default=""),
+    security: str = Form(default=""),
+    timeout: str = Form(default="20"),
+    enabled: str = Form(default=""),
+    on_approve: str = Form(default=""),
+    on_generate: str = Form(default=""),
+    on_signed: str = Form(default=""),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    row = db.execute(select(EmailSettings).limit(1)).scalar_one_or_none()
+    if row is None:
+        row = EmailSettings()
+        db.add(row)
+
+    row.host = host.strip() or "smtp.gmail.com"
+    port_number = int(_float_field(port, 587, 1, 65535))
+    ssl_mode = (security == "ssl") if security else bool(use_ssl)
+    # Selaraskan port dengan mode agar tidak terjadi WRONG_VERSION_NUMBER.
+    if ssl_mode and port_number == 587:
+        port_number = 465
+    elif not ssl_mode and port_number == 465:
+        port_number = 587
+    row.port = port_number
+    row.username = username.strip() or None
+    row.from_name = from_name.strip() or "STIT Buntet Pesantren"
+    row.from_email = from_email.strip() or None
+    row.use_ssl = ssl_mode
+    row.timeout = int(_float_field(timeout, 20, 5, 120))
+    row.enabled = bool(enabled)
+    row.on_approve = bool(on_approve)
+    row.on_generate = bool(on_generate)
+    # Bila form baru tidak mengirim on_signed, pakai nilai lama.
+    if on_signed != "":
+        row.on_signed = bool(on_signed)
+    row.updated_at = utcnow()
+
+    if password.strip():
+        store_email_password(db, row, password.strip())
+
+    append_event(
+        db,
+        "email.settings_saved",
+        {
+            "host": row.host,
+            "port": row.port,
+            "username": row.username,
+            "enabled": row.enabled,
+        },
+    )
+    db.commit()
+    return _redirect("/admin/email", "Pengaturan email disimpan.")
+
+
+@router.post("/email/test")
+def email_test(
+    to: str = Form(default=""),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    recipient = to.strip()
+    if not recipient:
+        return _redirect("/admin/email", "Alamat tujuan wajib diisi.", "err")
+    config = get_email_config(db)
+    try:
+        send_email(
+            config,
+            to=recipient,
+            subject="Tes SMTP — TTE STIT Buntet Pesantren",
+            text=(
+                "Email uji dari sistem TTE.\n\n"
+                "Jika Anda menerima email ini, konfigurasi SMTP sudah benar."
+            ),
+        )
+    except MailError as exc:
+        return _redirect("/admin/email", str(exc), "err")
+    return _redirect("/admin/email", f"Email uji terkirim ke {recipient}.")
+
+
+@router.post("/letters/{letter_id}/email")
+def letter_resend_email(
+    letter_id: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    target = f"/admin/letters/{letter_id}"
+    letter = db.get(LetterRequest, letter_id)
+    if letter is None:
+        return _redirect("/admin/letters", "Permintaan tidak ditemukan.", "err")
+    config = get_email_config(db)
+    if not config.ready:
+        return _redirect(
+            target,
+            "Email belum aktif. Atur akun SMTP di halaman Email.",
+            "err",
+        )
+    document = db.get(Document, letter.document_id) if letter.document_id else None
+    log = send_letter_email(
+        db, letter, config, kind="manual", document=document, force=True
+    )
+    if log is not None and log.status == "sent":
+        return _redirect(target, f"Email terkirim ke {letter.email}.")
+    message = log.error if log is not None else "Email gagal dikirim."
+    return _redirect(target, message, "err")
+
+
+@router.get("/storage", response_class=HTMLResponse)
+def storage_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    config = get_drive_config(db)
+    return templates.TemplateResponse(
+        request,
+        "admin/storage.html",
+        _context(
+            request,
+            active="storage",
+            drive=config,
+            drive_ready=config.ready,
+            folders=_drive_folders(db),
+            has_credentials=bool(config.credentials_json),
+        ),
+    )
+
+
+@router.post("/storage")
+async def storage_save(
+    enabled: str = Form(default=""),
+    folder_id: str = Form(default=""),
+    credentials: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    row = db.execute(select(StorageSettings).limit(1)).scalar_one_or_none()
+    if row is None:
+        row = StorageSettings()
+        db.add(row)
+
+    row.enabled = bool(enabled)
+    row.folder_id = folder_id.strip() or None
+    row.updated_at = utcnow()
+
+    if credentials is not None and credentials.filename:
+        raw = await credentials.read()
+        if len(raw) > 64 * 1024:
+            return _redirect("/admin/storage", "Berkas JSON terlalu besar.", "err")
+        try:
+            info = json.loads(raw)
+        except ValueError:
+            return _redirect(
+                "/admin/storage", "Berkas bukan JSON yang valid.", "err"
+            )
+        email = (info.get("client_email") or "").strip()
+        if not email or not info.get("private_key"):
+            return _redirect(
+                "/admin/storage",
+                "JSON bukan service account Google (client_email/private_key "
+                "tidak ditemukan).",
+                "err",
+            )
+        store_credentials(db, row, raw.decode("utf-8"), email)
+
+    append_event(
+        db,
+        "storage.saved",
+        {
+            "enabled": row.enabled,
+            "folder_id": row.folder_id,
+            "account": row.account_email,
+        },
+    )
+    db.commit()
+    return _redirect("/admin/storage", "Pengaturan penyimpanan disimpan.")
+
+
+@router.post("/storage/test")
+def storage_test(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    config = get_drive_config(db)
+    if not config.ready:
+        return _redirect(
+            "/admin/storage",
+            "Lengkapi kredensial dan Folder ID terlebih dahulu.",
+            "err",
+        )
+    try:
+        name = drive_test_connection(config)
+    except DriveError as exc:
+        return _redirect("/admin/storage", str(exc), "err")
+    return _redirect(
+        "/admin/storage", f"Terhubung ke folder Drive: {name}."
+    )
+
+
+@router.post("/storage/folders")
+def storage_folder_add(
+    name: str = Form(default=""),
+    folder_id: str = Form(default=""),
+    is_default: str = Form(default=""),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    name = name.strip()
+    folder_id = folder_id.strip()
+    if not name or not folder_id:
+        return _redirect(
+            "/admin/storage", "Nama folder dan Folder ID wajib diisi.", "err"
+        )
+    existing = db.execute(
+        select(DriveFolder).where(DriveFolder.folder_id == folder_id).limit(1)
+    ).scalar_one_or_none()
+    if existing is not None:
+        return _redirect(
+            "/admin/storage", "Folder ID tersebut sudah terdaftar.", "err"
+        )
+
+    row = DriveFolder(name=name, folder_id=folder_id, is_default=bool(is_default))
+    if bool(is_default):
+        for other in _drive_folders(db):
+            other.is_default = False
+    db.add(row)
+    append_event(
+        db,
+        "drive.folder_added",
+        {"name": name, "folder_id": folder_id, "default": row.is_default},
+    )
+    db.commit()
+    return _redirect("/admin/storage", f"Folder '{name}' ditambahkan.")
+
+
+@router.post("/storage/folders/{ref}/delete")
+def storage_folder_delete(
+    ref: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    row = db.get(DriveFolder, ref)
+    if row is None:
+        return _redirect("/admin/storage", "Folder tidak ditemukan.", "err")
+    for template in db.execute(
+        select(LetterTemplate).where(LetterTemplate.drive_folder_ref == row.id)
+    ).scalars():
+        template.drive_folder_ref = None
+    name = row.name
+    append_event(db, "drive.folder_deleted", {"name": name})
+    db.delete(row)
+    db.commit()
+    return _redirect(
+        "/admin/storage",
+        f"Folder '{name}' dihapus. Format surat memakai folder default.",
+    )
+
+
+@router.post("/storage/folders/{ref}/default")
+def storage_folder_default(
+    ref: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+):
+    row = db.get(DriveFolder, ref)
+    if row is None:
+        return _redirect("/admin/storage", "Folder tidak ditemukan.", "err")
+    for other in _drive_folders(db):
+        other.is_default = other.id == row.id
+    db.commit()
+    return _redirect(
+        "/admin/storage", f"Folder '{row.name}' dijadikan default."
     )

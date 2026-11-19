@@ -58,6 +58,25 @@ class Settings(BaseSettings):
     retention_years: int = 5
     enable_multisign: bool = True
 
+    # Email (SMTP Gmail)
+    email_enabled: bool = False
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from_name: str = "STIT Buntet Pesantren"
+    smtp_from_email: str | None = None
+    smtp_use_ssl: bool = False
+    smtp_timeout: int = 20
+    email_on_approve: bool = True
+    email_on_generate: bool = False  # usang: email kini dikirim setelah TTE
+    email_on_signed: bool = True
+
+    # Google Drive (penyimpanan dokumen)
+    drive_enabled: bool = False
+    drive_folder_id: str | None = None
+    drive_credentials_json: str | None = None
+
     # Auth sederhana
     require_auth: bool = False
     admin_token: str = "dev-admin-token"
@@ -76,6 +95,12 @@ class Settings(BaseSettings):
     @property
     def tsa_url_list(self) -> list[str]:
         return [u.strip() for u in self.tsa_urls.split(",") if u.strip()]
+
+    @property
+    def email_ready(self) -> bool:
+        return bool(
+            self.email_enabled and self.smtp_user and self.smtp_password
+        )
 
     @property
     def documents_dir(self) -> Path:

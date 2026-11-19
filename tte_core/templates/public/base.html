@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title>{% block title %}Verifikasi TTE{% endblock %} — {{ institution }}</title>
-  <link rel="icon" type="image/x-icon" href="/static/sneat/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/brand/stit-favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/brand/stit-favicon-192.png">
+  <link rel="apple-touch-icon" href="/static/brand/stit-favicon-192.png">
   <link rel="stylesheet" href="/static/sneat/css/fonts.css">
   <link rel="stylesheet" href="/static/sneat/css/boxicons.css">
   <style>
@@ -414,7 +416,7 @@
     </a>
     {% set path = request.url.path %}
     <nav class="nav-pill">
-      <a class="{{ 'on' if path == '/' else '' }}" href="/"><i class="bx bx-check-shield"></i>Verifikasi</a>
+      <a class="{{ 'on' if path == '/' else '' }}" href="/"><i class="bx bx-home"></i>Beranda</a>
       <a class="{{ 'on' if path == '/permohonan' else '' }}" href="/permohonan"><i class="bx bx-file"></i>Ajukan Surat</a>
       <a class="{{ 'on' if path == '/permohonan/status' else '' }}" href="/permohonan/status"><i class="bx bx-search"></i>Lacak</a>
       <a class="{{ 'on' if path == '/permohonan/validasi' else '' }}" href="/permohonan/validasi"><i class="bx bx-badge-check"></i>Validasi</a>

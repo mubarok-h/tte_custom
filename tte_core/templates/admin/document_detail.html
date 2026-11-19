@@ -105,7 +105,7 @@
       {% endif %}
     </div>
 
-    <div class="card">
+    <div class="card" id="permintaan-ttd" style="scroll-margin-top: 96px">
       <div class="card-header">
         <h5 class="card-title mb-0">Permintaan tanda tangan ({{ requests | length }})</h5>
       </div>
@@ -212,7 +212,7 @@
             <select id="signer_id" name="signer_id" class="form-select" required>
               <option value="">— pilih —</option>
               {% for signer in signers %}
-              <option value="{{ signer.id }}">{{ signer.name }} · {{ signer.jabatan }} ({{ signer.nip }})</option>
+              <option value="{{ signer.id }}" {{ 'selected' if preselect_signer_id and signer.id == preselect_signer_id else '' }}>{{ signer.name }} · {{ signer.jabatan }} ({{ signer.nip }})</option>
               {% endfor %}
             </select>
           </div>

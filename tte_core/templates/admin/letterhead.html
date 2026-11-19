@@ -1,0 +1,136 @@
+{% extends "admin/base.html" %}
+{% block title %}Kop Surat{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/admin/letter-templates">Format Surat</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Kop Surat</li>
+  </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="page-title mb-1">Kop Surat</h4>
+    <p class="page-subtitle mb-0">Satu kop dipakai untuk seluruh format surat.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/admin/letter-templates">← Kembali</a>
+</div>
+
+<ul class="nav nav-pills gap-2 mb-4">
+  <li class="nav-item"><a class="nav-link {{ 'active' if active_tab == 'templates' else '' }}" href="/admin/letter-templates"><i class="bx bx-layout me-1"></i>Format</a></li>
+  <li class="nav-item"><a class="nav-link {{ 'active' if active_tab == 'head' else '' }}" href="/admin/letterhead"><i class="bx bx-image-alt me-1"></i>Kop Surat</a></li>
+  <li class="nav-item"><a class="nav-link {{ 'active' if active_tab == 'style' else '' }}" href="/admin/letter-style"><i class="bx bx-font me-1"></i>Tipografi</a></li>
+</ul>
+
+<div class="row g-4">
+  <div class="col-12 col-xl-5">
+    <div class="card">
+      <div class="card-header"><h5 class="card-title mb-0">Pengaturan kop</h5></div>
+      <div class="card-body">
+        <form method="post" action="/admin/letterhead" enctype="multipart/form-data">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+
+          <div class="mb-3">
+            <label class="form-label" for="head-name">Nama kop</label>
+            <input id="head-name" name="name" class="form-control"
+                   value="{{ letterhead.name if letterhead else 'Kop Surat Utama' }}">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="head-logo">Logo</label>
+            <input id="head-logo" name="logo" type="file" class="form-control" accept="image/*">
+            <div class="form-text">
+              {% if letterhead and letterhead.logo_path %}
+              Logo saat ini: <span class="mono">{{ letterhead.logo_path }}</span>
+              {% else %}
+              Belum ada logo khusus; memakai logo bawaan aplikasi.
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="head-line1">Baris 1 (nama lembaga)</label>
+            <input id="head-line1" name="line1" class="form-control"
+                   value="{{ letterhead.line1 or '' if letterhead else '' }}"
+                   placeholder="STIT Buntet Pesantren">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="head-line2">Baris 2 (alamat)</label>
+            <input id="head-line2" name="line2" class="form-control"
+                   value="{{ letterhead.line2 or '' if letterhead else '' }}"
+                   placeholder="Buntet Pesantren, Cirebon, Jawa Barat">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="head-line3">Baris 3 (kontak)</label>
+            <input id="head-line3" name="line3" class="form-control"
+                   value="{{ letterhead.line3 or '' if letterhead else '' }}"
+                   placeholder="Telepon … · Email …">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="head-line4">Baris 4</label>
+            <input id="head-line4" name="line4" class="form-control"
+                   value="{{ letterhead.line4 or '' if letterhead else '' }}"
+                   placeholder="Buntet Pesantren Cirebon">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="head-line5">Baris alamat &amp; kontak (kecil)</label>
+            <textarea id="head-line5" name="line5" class="form-control" rows="2"
+                      placeholder="Komplek Pondok … Telepon …">{{ letterhead.line5 or '' if letterhead else '' }}</textarea>
+            <div class="form-text">Tampil kecil di bawah garis pemisah.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="head-color">Warna kop</label>
+            <input id="head-color" name="accent_color" type="color" class="form-control form-control-color"
+                   value="{{ letterhead.accent_color or '#0d6b3f' if letterhead else '#0d6b3f' }}">
+          </div>
+
+          <div class="mb-3">
+            <button class="btn btn-sm btn-outline-secondary" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#advanced-head">
+              Pengaturan lanjutan (HTML kustom)
+            </button>
+            <div class="collapse mt-2" id="advanced-head">
+              <textarea id="head-html" name="html_override" class="form-control mono" rows="6"
+                        placeholder="Kosongkan untuk memakai baris di atas.">{{ letterhead.html_override or '' if letterhead else '' }}</textarea>
+              <div class="form-text">Jika diisi, isi ini menggantikan seluruh kop termasuk logo dan garis.</div>
+            </div>
+          </div>
+
+          <button class="btn btn-primary w-100" type="submit">
+            <i class="bx bx-save me-1"></i>Simpan kop surat
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-7">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">Pratinjau kop</h5>
+        <button class="btn btn-sm btn-outline-primary" type="button" id="reload-preview">
+          <i class="bx bx-refresh me-1"></i>Muat ulang
+        </button>
+      </div>
+      <div class="card-body p-2">
+        <iframe id="head-frame" src="/admin/letterhead/preview" title="Pratinjau kop surat"
+                style="width:100%;height:420px;border:1px solid #e3e3e3;border-radius:.5rem;background:#fff"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const frame = document.getElementById('head-frame');
+  const button = document.getElementById('reload-preview');
+  if (button) {
+    button.addEventListener('click', function () {
+      frame.src = '/admin/letterhead/preview?t=' + Date.now();
+    });
+  }
+})();
+</script>
+{% endblock %}

@@ -360,9 +360,12 @@ Alur publik:
 Alur admin:
 
 - `/admin/letters` — antrean dan filter permohonan.
-- `/admin/letters/<id>` — verifikasi, setujui + isi nomor surat, tolak, unggah
-  PDF final, lalu lanjutkan ke dokumen untuk TTE.
+- `/admin/letters/<id>` — verifikasi, setujui + isi nomor surat, tolak, buat PDF
+  dari format surat, lalu lanjutkan ke dokumen untuk TTE. Unggah PDF manual
+  tetap tersedia sebagai cadangan.
 - `/admin/master` — CRUD lembaga, fakultas, prodi, dan data ketuanya.
+- `/admin/letter-templates` — CRUD format surat per jenis surat.
+- `/admin/letterhead` — kop surat global (logo, alamat, kontak).
 - `/admin/users` — manajemen akun multi-user.
 
 Pada instalasi baru, master data awal dibuat otomatis: **STIT Buntet
@@ -370,12 +373,94 @@ Pesantren**, **Fakultas Tarbiyah**, serta prodi **BKPI** dan **MPI**. Nama
 ketua/dekan/kaprodi dikosongkan dan dapat dilengkapi lewat panel admin.
 
 Status permohonan: `submitted` → `verified` → `approved` → `signed`, atau
-`rejected`. Saat PDF final diunggah, dokumen terhubung ke permohonan dan proses
-tanda tangan memakai alur TTE yang sama. Setelah dokumen ditandatangani, status
-permohonan menjadi `signed` dan nomor surat dapat divalidasi publik.
+`rejected`. Setelah disetujui, PDF surat dibuat dari format surat dan terhubung
+ke permohonan; proses tanda tangan memakai alur TTE yang sama. Setelah dokumen
+ditandatangani, status permohonan menjadi `signed` dan nomor surat dapat
+divalidasi publik.
 
-> Saat ini PDF final surat diunggah oleh Tata Usaha. Generator PDF otomatis dari
-> data permohonan belum disertakan.
+### Format surat & kop
+
+Lima format contoh dibuat otomatis (aktif kuliah, pengantar penelitian,
+keterangan lulus, rekomendasi, keterangan lainnya) dan muncul sebagai pilihan
+di `/permohonan`. Isi surat berupa HTML yang bisa diedit dengan pratinjau
+langsung. Kop surat bersifat global dan dipakai seluruh format.
+
+Keyword diambil dari data permohonan dan pejabat yang dipilih saat membuat PDF:
+
+| Penulisan | Hasil |
+|---|---|
+| `[NAMA]` | kapital semua |
+| `[nama]` | huruf kecil semua |
+| `[Nama]` | awal kata kapital |
+| `[blok_ttd]` | kota, tanggal, jabatan, nama, NIP |
+
+Keyword yang tersedia: identitas pemohon (`nama`, `nim`, `tempat_lahir`,
+`tanggal_lahir`, `email`, `telepon`, `alamat`), akademik (`lembaga`, `fakultas`,
+`prodi`, `semester`, `tahun_akademik`), permohonan (`jenis_surat`, `tujuan`,
+`keperluan`, `judul_penelitian`), surat (`nomor_surat`, `nomor_permohonan`,
+`tanggal_surat`, `kota`, `tahun`), dan penanda tangan
+(`nama_penandatangan`, `jabatan_penandatangan`, `nip_penandatangan`).
+
+Tipografi surat diatur global di `/admin/letter-style`: jenis huruf (Times New
+Roman, Arial, Georgia, Calibri, Liberation Serif, Noto Serif, DejaVu Serif),
+ukuran teks, jarak baris, jarak paragraf, margin halaman, serta ukuran teks kop
+(baris pertama, baris utama, baris alamat), serta jarak antara logo dan teks kop. Perubahan berlaku untuk surat
+yang dibuat setelahnya; PDF yang sudah terbit tidak berubah.
+
+### Penyimpanan Google Drive
+
+Dokumen PDF dapat dicadangkan otomatis ke Google Drive. Pengaturan dilakukan di
+**Sistem → Penyimpanan**:
+
+1. Buat project di Google Cloud Console dan aktifkan **Google Drive API**.
+2. Buat **Service Account**, lalu unduh kunci dalam format **JSON**.
+3. Buat folder di Drive dan bagikan ke email service account sebagai **Editor**.
+4. Isi **Folder ID** dan unggah JSON di halaman Penyimpanan, lalu aktifkan.
+5. Gunakan **Uji koneksi Drive** untuk memastikan konfigurasi benar.
+
+Selain folder global, Anda dapat menambahkan beberapa **folder bernama** di
+halaman Penyimpanan dan memilihnya per format surat (kolom **Folder Drive** pada
+editor format). Jika format tidak memilih folder, dipakai folder default. Setiap
+format surat dapat diarahkan ke folder berbeda, misalnya surat keterangan,
+surat penelitian, dan surat rekomendasi.
+
+Setiap PDF asli dan PDF bertanda tangan diunggah ke folder yang sesuai; ID
+berkas dan folder disimpan pada dokumen. Jika salinan lokal hilang, aplikasi mengunduhnya kembali
+dari Drive saat dibutuhkan (unduhan, verifikasi, atau lampiran email). Saat
+dokumen dihapus, berkas di Drive juga dihapus. Kegagalan unggah tidak
+menggagalkan proses tanda tangan dan tercatat pada audit log
+(`drive.upload_failed`). Kredensial disimpan terenkripsi dengan
+`TTE_TOKEN_SECRET` dan tidak pernah ditampilkan kembali di antarmuka.
+
+### Email otomatis (Gmail SMTP)
+
+Konfigurasi email diatur dari panel admin: **Sistem → Email**. Tidak perlu
+mengedit `.env` untuk pemakaian normal.
+
+1. Aktifkan verifikasi 2 langkah pada akun Google.
+2. Buat **App Password** 16 karakter di
+   `myaccount.google.com/apppasswords` (kata sandi akun biasa tidak bisa dipakai).
+3. Buka `/admin/email`, isi `smtp.gmail.com`, port `587`, alamat Gmail, dan App
+   Password, lalu aktifkan pengiriman.
+4. Simpan, kemudian gunakan **Kirim email uji**.
+
+Halaman yang sama menampilkan status konfigurasi, riwayat 25 pengiriman terakhir
+(tujuan, jenis, status, dan pesan galat), serta sakelar kapan email dikirim:
+
+- **Saat disetujui** — pemberitahuan berisi nomor surat dan tautan lacak status.
+- **Saat semua penandatangan selesai** — email dengan lampiran PDF bertanda
+  tangan. Surat tidak dikirim saat PDF baru dibuat.
+
+Tombol **Kirim ulang** tersedia di halaman detail permohonan. Kata sandi
+disimpan terenkripsi dengan `TTE_TOKEN_SECRET` dan tidak pernah ditampilkan
+kembali di antarmuka. Bila tabel `email_settings` masih kosong, nilai dari
+`TTE_SMTP_*` pada `.env` dipakai sebagai isi awal. Kegagalan pengiriman tidak
+menggagalkan persetujuan surat; penyebabnya dicatat pada riwayat email.
+
+PDF dibuat dengan WeasyPrint pada kertas A4. Jika format memuat keyword yang
+tidak dikenal, pembuatan PDF ditolak agar surat tidak tercetak dengan teks
+`[keyword]` mentah. Pemohon lama tetap aman ketika format dihapus karena jenis
+surat disimpan sebagai teks pada permohonan.
 
 ---
 
