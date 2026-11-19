@@ -265,8 +265,12 @@ def test_public_pages_follow_visibility_rules(admin_client, sample_pdf):
     assert "Hasil pemeriksaan" in check.text
     assert "UNSIGNED" in check.text
 
+    # Halaman CA tetap butuh login; berkas sertifikat & CRL dibuka publik
+    # agar pihak luar dapat memverifikasi tanda tangan.
     assert admin_client.get("/ca", follow_redirects=False).status_code == 303
-    assert admin_client.get("/crl/stit.crl", follow_redirects=False).status_code == 303
+    assert admin_client.get("/ca/root.crt").status_code == 200
+    assert admin_client.get("/ca/intermediate.crt").status_code == 200
+    assert admin_client.get("/crl/stit.crl").status_code == 200
     assert admin_client.get("/docs", follow_redirects=False).status_code == 303
 
 
