@@ -417,6 +417,15 @@ otomatis dibuang sekali saat aplikasi mulai (ditandai `meta_cleanup`), dan
 sesudahnya isi format tidak pernah disentuh lagi. Format contoh untuk instalasi
 baru sudah memuat blok di atas sebagai titik awal.
 
+Di atas kotak isi surat ada toolbar format: **tebal/miring/garis bawah/coret**
+(Ctrl+B, Ctrl+I, Ctrl+U), perataan kiri/tengah/kanan/rata, daftar butir dan
+bernomor, sisip tabel data, garis pemisah, pilihan spasi baris (1,0–2,0) dan
+jarak paragraf (rapat/normal/lega), serta ubah KAPITAL/kecil dan hapus tag pada
+pilihan. Perataan, spasi, dan jarak paragraf dibungkus `div` berkelas
+(`center`, `right`, `left`, `justify`, `spasi-1`…`spasi-2`,
+`paragraf-rapat`/`paragraf-normal`/`paragraf-lega`) yang sudah ada di CSS surat,
+jadi hasilnya sama pada pratinjau dan PDF.
+
 Keyword diambil dari data permohonan dan pejabat yang dipilih saat membuat PDF:
 
 | Penulisan | Hasil |

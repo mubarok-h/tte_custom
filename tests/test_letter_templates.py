@@ -1273,3 +1273,83 @@ def test_bersihkan_blok_nomor_otomatis(admin_client):
         db.delete(r)
     db.commit()
     db.close()
+
+
+def test_toolbar_format_dan_kelas_tipografi(admin_client):
+    """Toolbar editor dan kelas CSS pendukung tersedia untuk pratinjau & PDF."""
+    from tte_core.letter_docs import style_css
+
+    css = style_css()
+    for token in (
+        ".left { text-align: left; }",
+        ".justify { text-align: justify; }",
+        ".spasi-115 {",
+        ".spasi-15 {",
+        ".paragraf-rapat p {",
+        ".paragraf-lega p {",
+        "hr {",
+    ):
+        assert token in css, token
+
+    _login(admin_client)
+    page = admin_client.get("/admin/letter-templates/new")
+    assert page.status_code == 200
+    assert 'id="editor-toolbar"' in page.text
+    assert 'id="line-spacing"' in page.text
+    assert 'id="paragraph-gap"' in page.text
+    for cmd in (
+        "bold",
+        "italic",
+        "underline",
+        "strike",
+        "align-left",
+        "align-center",
+        "align-right",
+        "align-justify",
+        "list-ul",
+        "list-ol",
+        "table",
+        "rule",
+        "upper",
+        "lower",
+        "clear",
+    ):
+        assert f'data-cmd="{cmd}"' in page.text, cmd
+
+
+def test_kelas_spasi_dan_perataan_ikut_tercetak():
+    from datetime import datetime, timezone
+
+    from tte_core.letter_docs import render_letter_html
+    from tte_core.models import LetterHead, LetterRequest, LetterTemplate
+
+    settings = get_settings()
+    letter = LetterRequest(
+        request_no="REQ-CSS-1",
+        applicant_name="Uji Kelas",
+        nim="1",
+        email="a@b.c",
+        letter_type="Surat Uji Kelas",
+        status="approved",
+        submitted_at=datetime.now(timezone.utc),
+    )
+    template = LetterTemplate(
+        letter_type="Surat Uji Kelas",
+        name="Uji",
+        body_html=(
+            '<div class="center"><p>Judul</p></div>'
+            '<div class="spasi-2 paragraf-lega"><p>Isi.</p></div>'
+            '<ul><li>Butir</li></ul><hr>'
+        ),
+    )
+    document, unknown = render_letter_html(
+        letter=letter,
+        template=template,
+        letterhead=LetterHead(name="Kop Uji"),
+        signer=None,
+        settings=settings,
+    )
+    assert unknown == []
+    assert '<div class="center">' in document
+    assert "line-height: 2;" in document
+    assert "margin: 0 0 16pt;" in document

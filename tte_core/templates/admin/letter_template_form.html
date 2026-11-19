@@ -141,12 +141,51 @@
           <span class="small text-muted" id="preview-status">Pratinjau otomatis</span>
         </div>
         <div class="card-body">
+          <div class="editor-toolbar d-flex flex-wrap align-items-center gap-1 mb-2" id="editor-toolbar">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Format huruf">
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="bold" title="Tebal (Ctrl+B)"><strong>B</strong></button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="italic" title="Miring (Ctrl+I)"><em>I</em></button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="underline" title="Garis bawah (Ctrl+U)"><span style="text-decoration:underline">U</span></button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="strike" title="Coret"><span style="text-decoration:line-through">S</span></button>
+            </div>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Perataan">
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="align-left" title="Rata kiri">Kiri</button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="align-center" title="Rata tengah">Tengah</button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="align-right" title="Rata kanan">Kanan</button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="align-justify" title="Rata kiri-kanan">Rata</button>
+            </div>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Daftar dan tabel">
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="list-ul" title="Daftar butir">• Daftar</button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="list-ol" title="Daftar bernomor">1. Daftar</button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="table" title="Sisipkan tabel data">Tabel</button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="rule" title="Garis pemisah">Garis</button>
+            </div>
+            <select id="line-spacing" class="form-select form-select-sm" style="width:auto" title="Spasi baris">
+              <option value="">Spasi baris…</option>
+              <option value="spasi-1">1,0</option>
+              <option value="spasi-115">1,15</option>
+              <option value="spasi-15">1,5</option>
+              <option value="spasi-2">2,0</option>
+            </select>
+            <select id="paragraph-gap" class="form-select form-select-sm" style="width:auto" title="Jarak antarbaris paragraf">
+              <option value="">Jarak paragraf…</option>
+              <option value="paragraf-rapat">Rapat</option>
+              <option value="paragraf-normal">Normal</option>
+              <option value="paragraf-lega">Lega</option>
+            </select>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Huruf besar kecil">
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="upper" title="Jadikan KAPITAL">AA</button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="lower" title="Jadikan huruf kecil">aa</button>
+              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="clear" title="Hapus tag pada pilihan">Hapus tag</button>
+            </div>
+          </div>
           <textarea id="body_html" name="body_html" class="form-control mono" rows="18" required
                     placeholder="<p>Yang bertanda tangan di bawah ini ...</p>">{{ editing.body_html if editing else '' }}</textarea>
           <div class="form-text mt-2">
-            Nomor dan Hal surat ditulis di sini, bukan lagi otomatis. Klik
-            <strong>Nomor &amp; Hal</strong> pada panel kata kunci untuk menyisipkan
-            barisnya, lalu ubah label atau hapus baris yang tidak diperlukan.
+            Pilih teks lalu klik tombol format (atau Ctrl+B / Ctrl+I / Ctrl+U). Perataan, spasi, dan
+            jarak paragraf membungkus pilihan dengan <span class="mono">div</span> berkelas siap cetak.
+            Nomor dan Hal surat ditulis manual di sini — klik <strong>Nomor &amp; Hal</strong> pada
+            panel kata kunci untuk menyisipkan barisnya.
           </div>
           <div id="unknown-warning" class="alert alert-warning mt-3 d-none"></div>
         </div>
@@ -219,6 +258,122 @@
     clearTimeout(timer);
     timer = setTimeout(refresh, 450);
   }
+
+  // ---- Toolbar format teks ----
+  const toolbar = document.getElementById('editor-toolbar');
+  const lineSpacing = document.getElementById('line-spacing');
+  const paragraphGap = document.getElementById('paragraph-gap');
+
+  function selection() {
+    const start = body.selectionStart || 0;
+    const end = body.selectionEnd || 0;
+    return { start: start, end: end, text: body.value.slice(start, end) };
+  }
+
+  function insertAtSelection(text, caretOffset) {
+    const sel = selection();
+    let inserted = false;
+    body.focus();
+    body.setSelectionRange(sel.start, sel.end);
+    try {
+      inserted = document.execCommand('insertText', false, text);
+    } catch (err) {
+      inserted = false;
+    }
+    if (!inserted) {
+      body.value = body.value.slice(0, sel.start) + text + body.value.slice(sel.end);
+    }
+    const caret = sel.start + (typeof caretOffset === 'number' ? caretOffset : text.length);
+    body.setSelectionRange(caret, caret);
+    schedule();
+  }
+
+  function expandToLines() {
+    let start = body.selectionStart || 0;
+    let end = body.selectionEnd || 0;
+    if (start !== end) return;
+    const value = body.value;
+    start = value.lastIndexOf('\n', start - 1) + 1;
+    let nextBreak = value.indexOf('\n', end);
+    end = nextBreak === -1 ? value.length : nextBreak;
+    body.setSelectionRange(start, end);
+  }
+
+  function wrapInline(open, close) {
+    const inner = selection().text;
+    insertAtSelection(open + inner + close, open.length + inner.length);
+  }
+
+  function wrapBlock(className) {
+    expandToLines();
+    const inner = selection().text || '<p>Paragraf baru</p>';
+    const open = '<div class="' + className + '">\n';
+    insertAtSelection(open + inner + '\n</div>', open.length);
+  }
+
+  function toList(tag) {
+    expandToLines();
+    const lines = selection().text.split(/\n+/).map(function (line) {
+      return line.trim().replace(/^<p[^>]*>/i, '').replace(/<\/p>$/i, '').trim();
+    }).filter(function (line) { return line.length > 0; });
+    const items = lines.length ? lines : ['Butir baru'];
+    const html = '<' + tag + '>\n' + items.map(function (line) {
+      return '  <li>' + line + '</li>';
+    }).join('\n') + '\n</' + tag + '>';
+    insertAtSelection(html, 0);
+  }
+
+  function insertTable() {
+    const html = '<table class="data">\n' +
+      '  <tr><td>Label</td><td>:</td><td>Isi</td></tr>\n' +
+      '  <tr><td>Label</td><td>:</td><td>Isi</td></tr>\n' +
+      '</table>\n';
+    insertAtSelection(html, 0);
+  }
+
+  function runCommand(cmd) {
+    if (cmd === 'bold') return wrapInline('<strong>', '</strong>');
+    if (cmd === 'italic') return wrapInline('<em>', '</em>');
+    if (cmd === 'underline') return wrapInline('<u>', '</u>');
+    if (cmd === 'strike') return wrapInline('<s>', '</s>');
+    if (cmd === 'align-left') return wrapBlock('left');
+    if (cmd === 'align-center') return wrapBlock('center');
+    if (cmd === 'align-right') return wrapBlock('right');
+    if (cmd === 'align-justify') return wrapBlock('justify');
+    if (cmd === 'list-ul') return toList('ul');
+    if (cmd === 'list-ol') return toList('ol');
+    if (cmd === 'table') return insertTable();
+    if (cmd === 'rule') return insertAtSelection('\n<hr>\n');
+    if (cmd === 'upper') return insertAtSelection(selection().text.toUpperCase());
+    if (cmd === 'lower') return insertAtSelection(selection().text.toLowerCase());
+    if (cmd === 'clear') {
+      return insertAtSelection(selection().text.replace(/<[^>]+>/g, ''));
+    }
+  }
+
+  toolbar.addEventListener('click', function (ev) {
+    const button = ev.target.closest('[data-cmd]');
+    if (!button) return;
+    ev.preventDefault();
+    runCommand(button.dataset.cmd);
+  });
+
+  [lineSpacing, paragraphGap].forEach(function (chooser) {
+    chooser.addEventListener('change', function () {
+      if (!chooser.value) return;
+      wrapBlock(chooser.value);
+      chooser.value = '';
+      body.focus();
+    });
+  });
+
+  body.addEventListener('keydown', function (ev) {
+    if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+    const key = ev.key.toLowerCase();
+    if (key === 'b') { ev.preventDefault(); runCommand('bold'); }
+    if (key === 'i') { ev.preventDefault(); runCommand('italic'); }
+    if (key === 'u') { ev.preventDefault(); runCommand('underline'); }
+  });
 
   document.querySelectorAll('.keyword-chip').forEach(function (chip) {
     chip.addEventListener('click', function () {
