@@ -155,51 +155,12 @@
           <span class="small text-muted" id="preview-status">Pratinjau otomatis</span>
         </div>
         <div class="card-body">
-          <div class="editor-toolbar d-flex flex-wrap align-items-center gap-1 mb-2" id="editor-toolbar">
-            <div class="btn-group btn-group-sm" role="group" aria-label="Format huruf">
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="bold" title="Tebal (Ctrl+B)"><strong>B</strong></button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="italic" title="Miring (Ctrl+I)"><em>I</em></button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="underline" title="Garis bawah (Ctrl+U)"><span style="text-decoration:underline">U</span></button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="strike" title="Coret"><span style="text-decoration:line-through">S</span></button>
-            </div>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Perataan">
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="align-left" title="Rata kiri">Kiri</button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="align-center" title="Rata tengah">Tengah</button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="align-right" title="Rata kanan">Kanan</button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="align-justify" title="Rata kiri-kanan">Rata</button>
-            </div>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Daftar dan tabel">
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="list-ul" title="Daftar butir">• Daftar</button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="list-ol" title="Daftar bernomor">1. Daftar</button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="table" title="Sisipkan tabel data">Tabel</button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="rule" title="Garis pemisah">Garis</button>
-            </div>
-            <select id="line-spacing" class="form-select form-select-sm" style="width:auto" title="Spasi baris">
-              <option value="">Spasi baris…</option>
-              <option value="spasi-1">1,0</option>
-              <option value="spasi-115">1,15</option>
-              <option value="spasi-15">1,5</option>
-              <option value="spasi-2">2,0</option>
-            </select>
-            <select id="paragraph-gap" class="form-select form-select-sm" style="width:auto" title="Jarak antarbaris paragraf">
-              <option value="">Jarak paragraf…</option>
-              <option value="paragraf-rapat">Rapat</option>
-              <option value="paragraf-normal">Normal</option>
-              <option value="paragraf-lega">Lega</option>
-            </select>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Huruf besar kecil">
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="upper" title="Jadikan KAPITAL">AA</button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="lower" title="Jadikan huruf kecil">aa</button>
-              <button type="button" class="btn btn-outline-secondary px-2" data-cmd="clear" title="Hapus tag pada pilihan">Hapus tag</button>
-            </div>
-          </div>
           <textarea id="body_html" name="body_html" class="form-control mono" rows="18" required
-                    placeholder="<p>Yang bertanda tangan di bawah ini ...</p>">{{ editing.body_html if editing else '' }}</textarea>
+                    placeholder="<p>Yang bertanda tangan di bawah ini ...</p>">{{ editing.body_html if editing else default_body|default('') }}</textarea>
           <div class="form-text mt-2">
-            Pilih teks lalu klik tombol format (atau Ctrl+B / Ctrl+I / Ctrl+U). Perataan, spasi, dan
-            jarak paragraf membungkus pilihan dengan <span class="mono">div</span> berkelas siap cetak.
-            Nomor dan Hal surat ditulis manual di sini — klik <strong>Nomor &amp; Hal</strong> pada
-            panel kata kunci untuk menyisipkan barisnya.
+            Editor memakai TinyMCE: format teks, perataan, daftar, dan tabel tersedia di toolbar.
+            Gunakan tombol <strong>Nomor &amp; Hal</strong>, <strong>blok tanda tangan</strong>, atau
+            <strong>Blok manual</strong> di panel kanan untuk menyisipkan bagian siap pakai.
           </div>
           <div id="unknown-warning" class="alert alert-warning mt-3 d-none"></div>
         </div>
@@ -226,16 +187,35 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/tinymce/tinymce.min.js"></script>
 <script>
 (function () {
   const form = document.getElementById('template-form');
-  const body = document.getElementById('body_html');
+  const textarea = document.getElementById('body_html');
   const frame = document.getElementById('preview-frame');
   const status = document.getElementById('preview-status');
   const warning = document.getElementById('unknown-warning');
   const caseStyle = document.getElementById('case-style');
   const csrf = form.querySelector('input[name="csrf"]').value;
   let timer = null;
+  let editor = null;
+
+  const EDITOR_STYLE = [
+    'body{font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:1.55;color:#111}',
+    '.meta table{border-collapse:collapse}.meta td{padding:0 6px 0 0;vertical-align:top}',
+    '.body p{text-align:justify}',
+    '.ttd-row{display:flex;gap:18px;margin-top:22px}',
+    '.ttd-col{flex:1;text-align:center}',
+    '.ttd-row-single .ttd-col{flex:0 0 45%;margin:0 auto}',
+    '.ttd-date{text-align:right;margin-bottom:4px}',
+    '.ttd-space{height:40px}',
+    '.ttd-name{font-weight:bold;text-decoration:underline}',
+    '.left{text-align:left}.center{text-align:center}.right{text-align:right}.justify{text-align:justify}'
+  ].join('');
+
+  function content() {
+    return editor ? editor.getContent() : textarea.value;
+  }
 
   function styleKeyword(key) {
     const parts = key.split('_');
@@ -247,11 +227,16 @@
     }).join('_');
   }
 
+  function schedule() {
+    clearTimeout(timer);
+    timer = setTimeout(refresh, 450);
+  }
+
   function refresh() {
     status.textContent = 'Memperbarui…';
     const data = new FormData();
     data.append('csrf', csrf);
-    data.append('body_html', body.value);
+    data.append('body_html', content());
     fetch('/admin/letter-templates/preview', { method: 'POST', body: data })
       .then(function (res) { return res.json(); })
       .then(function (payload) {
@@ -268,126 +253,19 @@
       .catch(function () { status.textContent = 'Gagal memperbarui pratinjau'; });
   }
 
-  function schedule() {
-    clearTimeout(timer);
-    timer = setTimeout(refresh, 450);
-  }
-
-  // ---- Toolbar format teks ----
-  const toolbar = document.getElementById('editor-toolbar');
-  const lineSpacing = document.getElementById('line-spacing');
-  const paragraphGap = document.getElementById('paragraph-gap');
-
-  function selection() {
-    const start = body.selectionStart || 0;
-    const end = body.selectionEnd || 0;
-    return { start: start, end: end, text: body.value.slice(start, end) };
-  }
-
-  function insertAtSelection(text, caretOffset) {
-    const sel = selection();
-    let inserted = false;
-    body.focus();
-    body.setSelectionRange(sel.start, sel.end);
-    try {
-      inserted = document.execCommand('insertText', false, text);
-    } catch (err) {
-      inserted = false;
+  function insertHtml(html) {
+    if (editor) {
+      editor.insertContent(html);
+      editor.focus();
+    } else {
+      const start = textarea.selectionStart || 0;
+      const end = textarea.selectionEnd || 0;
+      textarea.value = textarea.value.slice(0, start) + html + textarea.value.slice(end);
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = start + html.length;
     }
-    if (!inserted) {
-      body.value = body.value.slice(0, sel.start) + text + body.value.slice(sel.end);
-    }
-    const caret = sel.start + (typeof caretOffset === 'number' ? caretOffset : text.length);
-    body.setSelectionRange(caret, caret);
     schedule();
   }
-
-  function expandToLines() {
-    let start = body.selectionStart || 0;
-    let end = body.selectionEnd || 0;
-    if (start !== end) return;
-    const value = body.value;
-    start = value.lastIndexOf('\n', start - 1) + 1;
-    let nextBreak = value.indexOf('\n', end);
-    end = nextBreak === -1 ? value.length : nextBreak;
-    body.setSelectionRange(start, end);
-  }
-
-  function wrapInline(open, close) {
-    const inner = selection().text;
-    insertAtSelection(open + inner + close, open.length + inner.length);
-  }
-
-  function wrapBlock(className) {
-    expandToLines();
-    const inner = selection().text || '<p>Paragraf baru</p>';
-    const open = '<div class="' + className + '">\n';
-    insertAtSelection(open + inner + '\n</div>', open.length);
-  }
-
-  function toList(tag) {
-    expandToLines();
-    const lines = selection().text.split(/\n+/).map(function (line) {
-      return line.trim().replace(/^<p[^>]*>/i, '').replace(/<\/p>$/i, '').trim();
-    }).filter(function (line) { return line.length > 0; });
-    const items = lines.length ? lines : ['Butir baru'];
-    const html = '<' + tag + '>\n' + items.map(function (line) {
-      return '  <li>' + line + '</li>';
-    }).join('\n') + '\n</' + tag + '>';
-    insertAtSelection(html, 0);
-  }
-
-  function insertTable() {
-    const html = '<table class="data">\n' +
-      '  <tr><td>Label</td><td>:</td><td>Isi</td></tr>\n' +
-      '  <tr><td>Label</td><td>:</td><td>Isi</td></tr>\n' +
-      '</table>\n';
-    insertAtSelection(html, 0);
-  }
-
-  function runCommand(cmd) {
-    if (cmd === 'bold') return wrapInline('<strong>', '</strong>');
-    if (cmd === 'italic') return wrapInline('<em>', '</em>');
-    if (cmd === 'underline') return wrapInline('<u>', '</u>');
-    if (cmd === 'strike') return wrapInline('<s>', '</s>');
-    if (cmd === 'align-left') return wrapBlock('left');
-    if (cmd === 'align-center') return wrapBlock('center');
-    if (cmd === 'align-right') return wrapBlock('right');
-    if (cmd === 'align-justify') return wrapBlock('justify');
-    if (cmd === 'list-ul') return toList('ul');
-    if (cmd === 'list-ol') return toList('ol');
-    if (cmd === 'table') return insertTable();
-    if (cmd === 'rule') return insertAtSelection('\n<hr>\n');
-    if (cmd === 'upper') return insertAtSelection(selection().text.toUpperCase());
-    if (cmd === 'lower') return insertAtSelection(selection().text.toLowerCase());
-    if (cmd === 'clear') {
-      return insertAtSelection(selection().text.replace(/<[^>]+>/g, ''));
-    }
-  }
-
-  toolbar.addEventListener('click', function (ev) {
-    const button = ev.target.closest('[data-cmd]');
-    if (!button) return;
-    ev.preventDefault();
-    runCommand(button.dataset.cmd);
-  });
-
-  [lineSpacing, paragraphGap].forEach(function (chooser) {
-    chooser.addEventListener('change', function () {
-      if (!chooser.value) return;
-      wrapBlock(chooser.value);
-      chooser.value = '';
-      body.focus();
-    });
-  });
-
-  body.addEventListener('keydown', function (ev) {
-    if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
-    const key = ev.key.toLowerCase();
-    if (key === 'b') { ev.preventDefault(); runCommand('bold'); }
-    if (key === 'i') { ev.preventDefault(); runCommand('italic'); }
-    if (key === 'u') { ev.preventDefault(); runCommand('underline'); }
-  });
 
   function manualColumn(index) {
     return '<div class="ttd-col">'
@@ -415,10 +293,10 @@
 
   document.querySelectorAll('.keyword-chip[data-manual]').forEach(function (chip) {
     chip.addEventListener('click', function () {
-      const html = manualBlock(Number(chip.dataset.manual));
-      insertAtSelection(html, html.length);
+      insertHtml(manualBlock(Number(chip.dataset.manual)));
     });
   });
+
   document.querySelectorAll('.keyword-chip').forEach(function (chip) {
     if (chip.dataset.manual) return;
     chip.addEventListener('click', function () {
@@ -434,13 +312,36 @@
           ? '[' + (chip.dataset.token || 'blok_ttd') + ']'
           : '[' + styleKeyword(key) + ']';
       }
-      insertAtSelection(token, token.length);
+      insertHtml(token);
     });
   });
 
-  body.addEventListener('input', schedule);
   caseStyle.addEventListener('change', schedule);
-  refresh();
+
+  form.addEventListener('submit', function () {
+    if (window.tinymce) tinymce.triggerSave();
+  });
+
+  tinymce.init({
+    selector: '#body_html',
+    license_key: 'gpl',
+    height: 560,
+    menubar: false,
+    branding: false,
+    promotion: false,
+    plugins: 'lists advlist table link code autoresize',
+    toolbar: 'undo redo | blocks | bold italic underline strikethrough | ' +
+      'alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | ' +
+      'table link | removeformat code',
+    block_formats: 'Paragraf=p; Judul 1=h1; Judul 2=h2; Judul 3=h3',
+    content_style: EDITOR_STYLE,
+    autoresize_bottom_margin: 12,
+    setup: function (ed) {
+      editor = ed;
+      ed.on('input change undo redo', schedule);
+      ed.on('init', function () { refresh(); });
+    }
+  });
 })();
 </script>
 {% endblock %}

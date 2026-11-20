@@ -57,6 +57,7 @@ from ..mailer import (
 )
 from ..letter_docs import (
     KEYWORD_GROUPS,
+    META_BLOCK_HTML,
     build_context,
     FONT_CHOICES,
     get_active_letterhead,
@@ -2378,6 +2379,7 @@ def letter_template_new(
             request,
             active="templates",
             editing=None,
+            default_body=META_BLOCK_HTML,
             signers=_active_signers(db),
             keyword_groups=KEYWORD_GROUPS,
             letterhead=get_active_letterhead(db),

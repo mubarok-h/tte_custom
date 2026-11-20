@@ -1296,27 +1296,12 @@ def test_toolbar_format_dan_kelas_tipografi(admin_client):
     _login(admin_client)
     page = admin_client.get("/admin/letter-templates/new")
     assert page.status_code == 200
-    assert 'id="editor-toolbar"' in page.text
-    assert 'id="line-spacing"' in page.text
-    assert 'id="paragraph-gap"' in page.text
-    for cmd in (
-        "bold",
-        "italic",
-        "underline",
-        "strike",
-        "align-left",
-        "align-center",
-        "align-right",
-        "align-justify",
-        "list-ul",
-        "list-ol",
-        "table",
-        "rule",
-        "upper",
-        "lower",
-        "clear",
-    ):
-        assert f'data-cmd="{cmd}"' in page.text, cmd
+    # Editor memakai TinyMCE yang di-host sendiri.
+    assert "/static/tinymce/tinymce.min.js" in page.text
+    assert "tinymce.init" in page.text
+    assert "selector: '#body_html'" in page.text
+    assert "table link" in page.text
+    assert 'data-manual="2"' in page.text
 
 
 def test_kelas_spasi_dan_perataan_ikut_tercetak():
