@@ -125,6 +125,20 @@
               </button>
             </div>
           </div>
+          <div class="keyword-group">
+            <div class="keyword-group-title">Blok manual (teks tetap)</div>
+            <div class="keyword-chips">
+              <button type="button" class="keyword-chip" data-manual="2" title="Isi nama & jabatan langsung di template">
+                Manual 2
+              </button>
+              <button type="button" class="keyword-chip" data-manual="3" title="2 berdampingan + 1 tengah di bawah">
+                Manual 3
+              </button>
+              <button type="button" class="keyword-chip" data-manual="4" title="2 + 2 dua baris">
+                Manual 4
+              </button>
+            </div>
+          </div>
           <div class="form-note mt-3">
             <span class="mono">[NAMA]</span> kapital semua ·
             <span class="mono">[nama]</span> kecil semua ·
@@ -375,7 +389,38 @@
     if (key === 'u') { ev.preventDefault(); runCommand('underline'); }
   });
 
+  function manualColumn(index) {
+    return '<div class="ttd-col">'
+      + '<div class="ttd-title">Jabatan ' + index + '</div>'
+      + '<div class="ttd-space"></div>'
+      + '<div class="ttd-name">Nama Pejabat ' + index + '</div>'
+      + '<div class="ttd-nip">NIP. ................</div>'
+      + '</div>';
+  }
+
+  function manualBlock(count) {
+    const date = '<div class="ttd-date">[Kota], [Tanggal_Surat]</div>';
+    let rows = '';
+    if (count === 2) {
+      rows = '<div class="ttd-row">' + manualColumn(1) + manualColumn(2) + '</div>';
+    } else if (count === 3) {
+      rows = '<div class="ttd-row">' + manualColumn(1) + manualColumn(2) + '</div>'
+        + '<div class="ttd-row ttd-row-single">' + manualColumn(3) + '</div>';
+    } else {
+      rows = '<div class="ttd-row">' + manualColumn(1) + manualColumn(2) + '</div>'
+        + '<div class="ttd-row">' + manualColumn(3) + manualColumn(4) + '</div>';
+    }
+    return '<div class="ttd-multi">' + date + rows + '</div>';
+  }
+
+  document.querySelectorAll('.keyword-chip[data-manual]').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      const html = manualBlock(Number(chip.dataset.manual));
+      insertAtSelection(html, html.length);
+    });
+  });
   document.querySelectorAll('.keyword-chip').forEach(function (chip) {
+    if (chip.dataset.manual) return;
     chip.addEventListener('click', function () {
       const key = chip.dataset.keyword;
       let token;
@@ -389,12 +434,7 @@
           ? '[' + (chip.dataset.token || 'blok_ttd') + ']'
           : '[' + styleKeyword(key) + ']';
       }
-      const start = body.selectionStart || 0;
-      const end = body.selectionEnd || 0;
-      body.value = body.value.slice(0, start) + token + body.value.slice(end);
-      body.focus();
-      body.selectionStart = body.selectionEnd = start + token.length;
-      schedule();
+      insertAtSelection(token, token.length);
     });
   });
 

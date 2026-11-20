@@ -206,6 +206,7 @@ def test_letter_template_crud_and_public_dropdown(admin_client):
     detail = admin_client.get(f"/admin/letter-templates/{template_id}")
     assert detail.status_code == 200
     assert "Format uji otomatis" in detail.text
+    assert "Blok manual" in detail.text
 
     toggled = admin_client.post(
         f"/admin/letter-templates/{template_id}/toggle",
