@@ -2547,6 +2547,7 @@ def letter_template_preview(
     body_html: str = Form(default=""),
     letter_id: str = Form(default=""),
     signer_id: str = Form(default=""),
+    letter_type: str = Form(default=""),
     db: Session = Depends(get_db),
     _admin=Depends(require_permission("templates")),
     _csrf: None = Depends(require_csrf),
@@ -2564,9 +2565,13 @@ def letter_template_preview(
     if letter is not None:
         if signer is None and letter.signer_id:
             signer = db.get(SignerProfile, letter.signer_id)
-        context = build_context(letter, signer, settings)
+        context = build_context(
+            letter, signer, settings, branding=load_branding(db)
+        )
     else:
-        context = sample_context(settings, load_branding(db))
+        context = sample_context(
+            settings, load_branding(db), letter_type=letter_type.strip()
+        )
 
     document, unknown = render_preview_html(
         body_html,

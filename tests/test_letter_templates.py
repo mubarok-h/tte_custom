@@ -1340,3 +1340,19 @@ def test_kelas_spasi_dan_perataan_ikut_tercetak():
     assert '<div class="center">' in document
     assert "line-height: 2;" in document
     assert "margin: 0 0 16pt;" in document
+
+
+def test_preview_uses_selected_letter_type(admin_client):
+    _login(admin_client)
+    response = admin_client.post(
+        "/admin/letter-templates/preview",
+        data={
+            "csrf": _csrf(),
+            "body_html": "<p>Hal: [Hal]</p>",
+            "letter_type": "Surat Tugas Dosen",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "Surat Tugas Dosen" in payload["html"]
+    assert "Surat Keterangan Aktif Kuliah" not in payload["html"]

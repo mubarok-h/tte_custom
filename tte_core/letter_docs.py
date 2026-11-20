@@ -370,10 +370,15 @@ def build_context(
     return values
 
 
-def sample_context(settings: Settings, branding=None) -> dict[str, str]:
+def sample_context(
+    settings: Settings, branding=None, letter_type: str = ""
+) -> dict[str, str]:
     """Data contoh untuk pratinjau template di panel admin."""
     values = {key: sample for key, (_, sample) in KEYWORDS.items()}
     values["kota"] = branding.location if branding else settings.location
+    if letter_type:
+        values["hal"] = letter_type
+        values["jenis_surat"] = letter_type
     values["lembaga"] = (
         branding.institution if branding else settings.institution
     )

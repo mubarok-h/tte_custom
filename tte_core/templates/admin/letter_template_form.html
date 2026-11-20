@@ -237,6 +237,8 @@
     const data = new FormData();
     data.append('csrf', csrf);
     data.append('body_html', content());
+    const letterType = document.getElementById('letter_type');
+    data.append('letter_type', letterType ? letterType.value : '');
     fetch('/admin/letter-templates/preview', { method: 'POST', body: data })
       .then(function (res) { return res.json(); })
       .then(function (payload) {
@@ -317,6 +319,8 @@
   });
 
   caseStyle.addEventListener('change', schedule);
+  const letterTypeInput = document.getElementById('letter_type');
+  if (letterTypeInput) letterTypeInput.addEventListener('input', schedule);
 
   form.addEventListener('submit', function () {
     if (window.tinymce) tinymce.triggerSave();
